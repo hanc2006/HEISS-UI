@@ -964,14 +964,6 @@ export function SettingsDialog({ view, open, section, onSectionChange, onClose, 
             </button>
           );
         })}
-        <a className="set-nav-discord" href={discordUrl} target="_blank" rel="noreferrer">
-          <DiscordIcon size={13} />
-          <span>Join the Discord</span>
-        </a>
-        <button type="button" className="set-nav-feedback" onClick={() => openFeedback({ from: 'settings' })}>
-          <strong>Idea or bug?</strong>
-          <span>Send it to the board</span>
-        </button>
       </nav>
 
       {/* A region named by its heading, so a screen reader hears where it landed. */}
