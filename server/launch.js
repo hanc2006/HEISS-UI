@@ -27,6 +27,16 @@ export function shouldOpenBrowser({ env = process.env, argv = process.argv, plat
   return true;
 }
 
+/**
+ * Whether HEISS UI runs as a server: no browser opens, so nobody sits at this
+ * computer to set a studio password (access.js then makes one). Dev and CI
+ * also open no browser, but they are not servers.
+ */
+export function launchedAsServer({ env = process.env, argv = process.argv, platform = process.platform } = {}) {
+  if (truthy(env.CI) || /^dev/.test(env.npm_lifecycle_event || "")) return false;
+  return !shouldOpenBrowser({ env, argv, platform });
+}
+
 /** Opens `url` in the default browser, detached. Failing quietly is fine: the address is printed too. */
 export function openBrowser(url, { platform = process.platform, run = spawn } = {}) {
   if (!/^https?:\/\//.test(String(url || ""))) return false;

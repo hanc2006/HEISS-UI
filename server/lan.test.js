@@ -2,8 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { listensBeyondThisComputer, resolveLan } from "./lan.js";
 
-test("off by default, on this computer only", () => {
-  assert.deepEqual(resolveLan({ argv: [], env: {} }), { host: "127.0.0.1", source: "setting", saved: false });
+test("on by default, listening on every address", () => {
+  assert.deepEqual(resolveLan({ argv: [], env: {} }), { host: "0.0.0.0", source: "setting", saved: true });
+});
+
+test("the Settings switch off, or HOST=127.0.0.1 in .env, keeps it on this computer", () => {
+  assert.deepEqual(resolveLan({ env: { HEISS_LAN: "0" }, fileKeys: new Set(["HEISS_LAN"]) }), { host: "127.0.0.1", source: "setting", saved: false });
+  assert.deepEqual(resolveLan({ env: { HOST: "127.0.0.1" }, fileKeys: new Set(["HOST"]) }), { host: "127.0.0.1", source: "setting", saved: false });
+  // One address of this machine's, named in .env, is kept as it is.
+  assert.equal(resolveLan({ env: { HOST: "192.168.1.20" }, fileKeys: new Set(["HOST"]) }).host, "192.168.1.20");
 });
 
 test("--lan opens it for the run, whatever was saved", () => {

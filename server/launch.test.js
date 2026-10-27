@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
-import { heissAnswersAt, listenWithFallback, openBrowser, probeHost, shouldOpenBrowser } from "./launch.js";
+import { heissAnswersAt, launchedAsServer, listenWithFallback, openBrowser, probeHost, shouldOpenBrowser } from "./launch.js";
 
 const desktop = { DISPLAY: ":0" };
 
@@ -18,6 +18,16 @@ test("the browser opens for a launcher start, and not where nobody could see it"
   assert.equal(shouldOpenBrowser({ env: { CI: "true" }, argv: [], platform: "win32" }), false);
   assert.equal(shouldOpenBrowser({ env: { SSH_CONNECTION: "10.0.0.2 5000 10.0.0.1 22", ...desktop }, argv: [], platform: "linux" }), false);
   assert.equal(shouldOpenBrowser({ env: { npm_lifecycle_event: "dev" }, argv: [], platform: "darwin" }), false);
+});
+
+test("a start that opens no browser runs as a server, except dev and CI", () => {
+  assert.equal(launchedAsServer({ env: {}, argv: [], platform: "darwin" }), false, "a desktop start");
+  assert.equal(launchedAsServer({ env: {}, argv: [], platform: "linux" }), true, "Linux without a display");
+  assert.equal(launchedAsServer({ env: { HEISS_NO_BROWSER: "1" }, argv: [], platform: "win32" }), true, "the Docker image");
+  assert.equal(launchedAsServer({ env: {}, argv: ["node", "index.js", "--no-browser"], platform: "darwin" }), true);
+  assert.equal(launchedAsServer({ env: { SSH_TTY: "/dev/pts/0", ...desktop }, argv: [], platform: "linux" }), true);
+  assert.equal(launchedAsServer({ env: { npm_lifecycle_event: "dev" }, argv: [], platform: "linux" }), false);
+  assert.equal(launchedAsServer({ env: { CI: "true", HEISS_NO_BROWSER: "1" }, argv: [], platform: "linux" }), false);
 });
 
 test("each system opens the address with its own opener, and only web addresses", () => {

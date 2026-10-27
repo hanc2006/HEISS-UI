@@ -90,8 +90,13 @@ export function reloadAccess() {
 
 /* ---------------------------------------------------------- Admin from devices */
 
+/** HEISS_ADMIN_FROM_DEVICES=1 turns the switch on for every start, for a server nobody sits at. */
+export function adminFromDevicesForced(env = process.env) {
+  return /^(1|true|yes|on)$/i.test(String(env.HEISS_ADMIN_FROM_DEVICES || "").trim());
+}
+
 export function devicesMayAdmin() {
-  return load().adminFromDevices;
+  return adminFromDevicesForced() || load().adminFromDevices;
 }
 
 export function setDevicesMayAdmin(enabled) {
@@ -115,6 +120,28 @@ export async function setStudioPassword(password = "") {
   // A new password is a fresh start: devices that knew the old one sign in again.
   config.sessions = [];
   save({ twice: true });
+}
+
+/**
+ * The studio password at start-up, for a server nobody sits at:
+ * - HEISS_STUDIO_PASSWORD (8+ characters) is the password whenever it is
+ *   set; a different one saved before is replaced.
+ * - Otherwise, a server (`asServer`) that has no way to sign in yet
+ *   (`canSignIn`: no studio password, no Hidden password standing in) gets a
+ *   random one. Only its hash is kept: the caller prints it once.
+ * Resolves `{ source: "env" | "generated" | "", password?, error? }`.
+ */
+export async function ensureStudioPassword({ env = process.env, asServer = false, canSignIn = studioPasswordSet() } = {}) {
+  const fromEnv = String(env.HEISS_STUDIO_PASSWORD || "");
+  if (fromEnv) {
+    if (fromEnv.length < 8) return { source: "", error: "HEISS_STUDIO_PASSWORD needs at least 8 characters; it was not used." };
+    if (!(await checkStudioPassword(fromEnv))) await setStudioPassword(fromEnv);
+    return { source: "env" };
+  }
+  if (!asServer || canSignIn) return { source: "" };
+  const password = crypto.randomBytes(12).toString("base64url");
+  await setStudioPassword(password);
+  return { source: "generated", password };
 }
 
 /** Whether this is the studio password. Always pays for scrypt, set or not, so timing says nothing. */

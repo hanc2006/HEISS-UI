@@ -51,19 +51,19 @@ test("a wrong key, a missing file or something that isn't PEM is refused in plai
   assert.equal(inspectTls("", "").configured, false);
 });
 
-test("with a certificate, other devices get HTTPS and plain HTTP stays on this computer", () => {
+test("with a certificate, other devices also get HTTPS, and plain HTTP keeps listening on the same host", () => {
   const ready = inspectTls(certFile, keyFile);
-  assert.deepEqual(listenPlan({ host: "0.0.0.0", tls: ready }), { httpHost: "127.0.0.1", httpsHost: "0.0.0.0", tlsProblem: "" });
+  assert.deepEqual(listenPlan({ host: "0.0.0.0", tls: ready }), { httpHost: "0.0.0.0", httpsHost: "0.0.0.0", tlsProblem: "" });
   // LAN mode off: nothing about HTTPS, nothing changes.
   assert.deepEqual(listenPlan({ host: "127.0.0.1", tls: ready }), { httpHost: "127.0.0.1", httpsHost: "", tlsProblem: "" });
   // No certificate: plain HTTP for everyone, as before.
   assert.deepEqual(listenPlan({ host: "0.0.0.0", tls: inspectTls("", "") }), { httpHost: "0.0.0.0", httpsHost: "", tlsProblem: "" });
 });
 
-test("a certificate that can't be used keeps the network closed instead of falling back to plain HTTP", () => {
+test("a certificate that can't be used costs only HTTPS, and says why", () => {
   const broken = inspectTls(certFile, write("other.key", strangerKey));
   const plan = listenPlan({ host: "0.0.0.0", tls: broken });
-  assert.equal(plan.httpHost, "127.0.0.1");
+  assert.equal(plan.httpHost, "0.0.0.0");
   assert.equal(plan.httpsHost, "");
   assert.match(plan.tlsProblem, /doesn’t belong/);
 });

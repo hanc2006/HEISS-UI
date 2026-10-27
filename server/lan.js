@@ -2,10 +2,13 @@ import fs from "node:fs";
 import path from "node:path";
 
 /**
- * Opening the studio on other devices (LAN mode). Three ways in, strongest first:
+ * Opening the studio on other devices (LAN mode). On by default: the server
+ * listens on 0.0.0.0, and other devices still sign in with the studio
+ * password (access.js). Three ways to decide otherwise, strongest first:
  * - `--lan` on the command line (npm start -- --lan, npm run dev -- --lan): on for that run.
  * - HOST from the shell: whatever it says.
- * - The Settings switch, saved as HEISS_LAN in .env (an older HOST=0.0.0.0 there counts too).
+ * - The Settings switch, saved as HEISS_LAN in .env (HEISS_LAN=0 keeps it on
+ *   this computer), or a HOST line in .env (HOST=127.0.0.1 counts as off).
  *
  * No side effects, so the dev launcher can ask before anything else has read .env.
  */
@@ -14,7 +17,7 @@ export function resolveLan({ argv = [], env = {}, fileKeys = new Set() } = {}) {
   const flag = argv.includes("--lan");
   const shellHost = env.HOST && !fileKeys.has("HOST") ? env.HOST : "";
   const fileHost = fileKeys.has("HOST") ? env.HOST || "" : "";
-  const saved = env.HEISS_LAN === "1" || (env.HEISS_LAN !== "0" && wildcard(fileHost));
+  const saved = env.HEISS_LAN === "1" || (env.HEISS_LAN !== "0" && (!fileHost || wildcard(fileHost)));
   if (flag) return { host: "0.0.0.0", source: "flag", saved };
   if (shellHost) return { host: shellHost, source: "shell", saved };
   if (saved) return { host: "0.0.0.0", source: "setting", saved };

@@ -6,18 +6,15 @@ import { httpsPort, startupTls, watchCertificate } from "./tls.js";
 /**
  * Where the server listens.
  *
- * Plain HTTP on `port`, as always. With LAN mode on and a certificate
- * configured (tls.js), other devices get HTTPS on its own port instead, and
- * plain HTTP stays on localhost, where nothing crosses a network: this
- * computer keeps http://localhost:<port> whatever happens to the certificate.
- * A certificate that is set but unusable keeps the network closed rather than
- * quietly falling back to plain HTTP there, and says why.
+ * Plain HTTP on `port` and `host`, always. With LAN mode on and a certificate
+ * configured (tls.js), other devices also get HTTPS on its own port. A
+ * certificate that is set but unusable costs only HTTPS, and says why.
  */
 export function listenPlan({ host, tls = startupTls }) {
   const lan = listensBeyondThisComputer(host);
   const secure = lan && tls.configured;
   return {
-    httpHost: secure ? "127.0.0.1" : host,
+    httpHost: host,
     httpsHost: secure && tls.ok ? host : "",
     tlsProblem: secure && !tls.ok ? tls.error || "The certificate can’t be used." : ""
   };
@@ -44,7 +41,7 @@ export async function startServers(app, { host, port, fallback = true, onListeni
   }
   onListening({ plan, port: listening.port, moved: listening.moved });
   httpsProblem = plan.tlsProblem;
-  if (plan.tlsProblem) console.warn(`\n  HTTPS can’t start: ${plan.tlsProblem}\n  Other devices can’t connect until that’s fixed. This computer can still open http://localhost:${listening.port}\n`);
+  if (plan.tlsProblem) console.warn(`\n  HTTPS can’t start: ${plan.tlsProblem}\n  Plain HTTP still answers on port ${listening.port}.\n`);
   if (plan.httpsHost) {
     const secure = https.createServer({ cert: startupTls.pem.cert, key: startupTls.pem.key }, app);
     secure.once("error", (error) => {

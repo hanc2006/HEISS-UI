@@ -18,7 +18,8 @@ import { printBanner } from './banner.js';
 import { releaseStatus, requestRestart, saveUpdatePrefs, startReleaseUpdate, warmReleaseCheck } from './updater.js';
 import { PORT_IN_USE_CODE, removeForeignLaunchers } from './release-swap.js';
 import { allowLanActions, comfy, comfyOutputDir, comfyRecentlyUnreachable, comfyUrl, demoMode, hasNode, host, inDotFolder, isComfyTimeout, lan, lanListening, localOutputFile, normalizeComfyUrl, noteComfyFetchError, noteComfyReachable, noteComfySilent, onComfyGone, onComfyWork, optionsFor, outputMediaPattern, port, requestedPort, root, saveLanSetting, setComfyFolderPaths, setComfyOutputDir, setComfyUrl, setListeningPort } from './comfy.js';
-import { canAdmin, clientOf, deviceSession, studioPasswordSet } from './access.js';
+import { canAdmin, clientOf, deviceSession, ensureStudioPassword, studioPasswordSet } from './access.js';
+import { launchedAsServer } from './launch.js';
 import { limitedCheck, registerAccessRoutes } from './access-routes.js';
 import { requestGuard } from './request-guard.js';
 import { stripMetadata } from './metadata-strip.js';
@@ -2872,6 +2873,20 @@ try { removeForeignLaunchers(root); } catch { /* a launcher in use or read-only:
 
 // Under `npm run dev*` the page comes from Vite, which forwards to this exact port, so it stays put there.
 const dev = /^dev/.test(process.env.npm_lifecycle_event || "");
+
+// A server nobody sits at can't set a studio password in Settings: take
+// HEISS_STUDIO_PASSWORD, or make one up and print it below (access.js).
+let startupPassword = { source: "" };
+try {
+  startupPassword = await ensureStudioPassword({
+    asServer: lanListening && launchedAsServer(),
+    canSignIn: studioPasswordSet() || isPrivacyEnabled()
+  });
+} catch (error) {
+  startupPassword = { source: "", error: `The studio password couldn’t be set: ${error.message}` };
+}
+if (startupPassword.error) console.warn(`\n  ${startupPassword.error}\n`);
+
 startServers(app, {
   host,
   port,
@@ -2902,12 +2917,18 @@ startServers(app, {
     const pagePort = dev ? 5173 : listening;
     Promise.resolve(printBanner({ version: appVersion, url: `http://${shownHost}:${pagePort}`, comfyUrl })).then(async () => {
       // Listening beyond this computer: say where a phone can open it.
-      if (lanListening && (host === "0.0.0.0" || host === "::") && !plan.tlsProblem) {
+      if (lanListening && (host === "0.0.0.0" || host === "::")) {
         const addresses = plan.httpsHost
           ? startupTls.names.filter((name) => !name.startsWith("*.")).map((name) => `https://${name.includes(":") ? `[${name}]` : name}:${httpsPort}`)
           : Object.values(os.networkInterfaces()).flatMap((entries) => entries || []).filter((entry) => entry.family === "IPv4" && !entry.internal).map((entry) => `http://${entry.address}:${pagePort}`);
         for (const address of addresses) console.log(`    ➜  Network   ${address}`);
-        if (addresses.length) console.log(studioPasswordSet()
+      }
+      // Shown once: only its hash is kept. Printed even with no address listed (a container, a tunnel).
+      if (startupPassword.source === "generated") {
+        console.log(`    Studio password: ${startupPassword.password}`);
+        console.log("    Other devices sign in with it. It is shown only this once; set HEISS_STUDIO_PASSWORD to choose your own.\n");
+      } else if (lanListening && (host === "0.0.0.0" || host === "::")) {
+        console.log(studioPasswordSet()
           ? "    Other devices sign in with the studio password.\n"
           : isPrivacyEnabled()
             ? "    Other devices sign in with your Hidden password until you set a studio password (Settings › Connection).\n"
