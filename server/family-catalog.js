@@ -153,14 +153,26 @@ export const modelDownloads = {
   krea2_raw_bf16: [{ file: "krea2_raw_bf16.safetensors", label: "Krea 2 Raw", url: hf("Comfy-Org/Krea-2", "diffusion_models/krea2_raw_bf16.safetensors"), bytes: 26_283_332_608, sha256: "f99bb0ff8e362b77342bc4994e0c50906fe7ef7074864b181b7d48d2fa6d03d7" }],
   flux2_klein_4b_fp8: [{ file: "flux-2-klein-4b-fp8.safetensors", fp8: true, label: "Flux.2 Klein 4B", url: hf("black-forest-labs/FLUX.2-klein-4b-fp8", "flux-2-klein-4b-fp8.safetensors"), bytes: 4_070_624_520, sha256: "97ed34fe0567e436200f2faee3939b88f2b5d99f8af2a4dc16532c4245c0ccb6" }],
   flux2_klein_4b: [{ file: "flux-2-klein-4b.safetensors", label: "Flux.2 Klein 4B", url: hf("Comfy-Org/vae-text-encorder-for-flux-klein-4b", "split_files/diffusion_models/flux-2-klein-4b.safetensors"), bytes: 7_751_105_712, sha256: "ec3d4e733a771f61c052fb4856c48b336c55eaf2c65487c2a1faeb9bbda7a343" }],
-  flux2_dev_fp8: [{ file: "flux2_dev_fp8mixed.safetensors", fp8: true, label: "Flux.2 Dev", url: hf("Comfy-Org/flux2-dev", "split_files/diffusion_models/flux2_dev_fp8mixed.safetensors"), bytes: 35_455_599_592, sha256: "863a82e4ff950a42a6b0e80bea824828f129eb1a8fbbdbd9e8cb29859127b486" }]
+  flux2_dev_fp8: [{ file: "flux2_dev_fp8mixed.safetensors", fp8: true, label: "Flux.2 Dev", url: hf("Comfy-Org/flux2-dev", "split_files/diffusion_models/flux2_dev_fp8mixed.safetensors"), bytes: 35_455_599_592, sha256: "863a82e4ff950a42a6b0e80bea824828f129eb1a8fbbdbd9e8cb29859127b486" }],
+  // Built-in workflows only (workflows/*.json), found by file name; no family offers them.
+  // `bytes` is an estimate where Hugging Face shows only a rounded size; the server's own length replaces it.
+  real_dream_klein9b_fp8: [{ file: "real-dream-klein9b-1-fp8.safetensors", fp8: true, label: "Real Dream Klein 9B", url: hf("sinatra-rd/real-dream-klein9b", "real-dream-klein9b-1-fp8.safetensors"), bytes: 9_078_611_576, sha256: "aca152c1cb6e254e0079e7bc8802189f5d1997f6e3b956cd528108172f99c040" }],
+  z_image_turbo_bf16: [{ file: "z_image_turbo_bf16.safetensors", label: "Z-Image Turbo", url: hf("Comfy-Org/z_image_turbo", "split_files/diffusion_models/z_image_turbo_bf16.safetensors"), bytes: 12_300_000_000, sha256: "2407613050b809ffdff18a4ac99af83ea6b95443ecebdf80e064a79c825574a6" }]
+};
+
+// Upscale models for models/upscale_models, which built-in workflows name (found by file name).
+export const upscaleDownloads = {
+  realesrgan_x4plus: [{ file: "RealESRGAN_x4plus.safetensors", label: "RealESRGAN x4plus", url: hf("Comfy-Org/Real-ESRGAN_repackaged", "RealESRGAN_x4plus.safetensors"), bytes: 66_900_000, sha256: "37f9a931c215f040aa6d50f711f2cb115f713c46df1d0d6469a8bd7bfe9a60bb" }],
+  clearreality_v1: [{ file: "4x-ClearRealityV1.pth", label: "4x ClearReality V1", url: hf("Kim2091/ClearRealityV1", "4x-ClearRealityV1.pth"), bytes: 9_016_074, sha256: "a4cd3a25b00e0be949d4302fc774eb4d7f2ed5f47cdb51551e2d75fa6562e51e" }]
 };
 
 // Whole checkpoints (model, text encoders and VAE in one file), for models/checkpoints.
 export const checkpointDownloads = {
   realvisxl5_lightning: [{ file: "RealVisXL_V5.0_Lightning_fp16.safetensors", label: "RealVisXL V5.0 Lightning", url: hf("SG161222/RealVisXL_V5.0_Lightning", "RealVisXL_V5.0_Lightning_fp16.safetensors"), bytes: 6_938_065_512, sha256: "fabcadd9330dcc4f9702063428d40b9d4d07168d8acefc819b8d1d9db466b3ec" }],
   realvisxl5: [{ file: "RealVisXL_V5.0_fp16.safetensors", label: "RealVisXL V5.0", url: hf("SG161222/RealVisXL_V5.0", "RealVisXL_V5.0_fp16.safetensors"), bytes: 6_938_065_488, sha256: "6a35a7855770ae9820a3c931d4964c3817b6d9e3c6f9c4dabb5b3a94e5643b80" }],
-  sdxl_base: [{ file: "sd_xl_base_1.0.safetensors", label: "SDXL 1.0", url: hf("stabilityai/stable-diffusion-xl-base-1.0", "sd_xl_base_1.0.safetensors"), bytes: 6_938_078_334, sha256: "31e35c80fc4829d14f90153f4c74cd59c90b779f6afe05a74cd6120b893f7e5b" }]
+  sdxl_base: [{ file: "sd_xl_base_1.0.safetensors", label: "SDXL 1.0", url: hf("stabilityai/stable-diffusion-xl-base-1.0", "sd_xl_base_1.0.safetensors"), bytes: 6_938_078_334, sha256: "31e35c80fc4829d14f90153f4c74cd59c90b779f6afe05a74cd6120b893f7e5b" }],
+  // Built-in workflows only (workflows/sdxl-base-refiner.json); bytes estimated from Hugging Face's rounded size.
+  sdxl_refiner: [{ file: "sd_xl_refiner_1.0.safetensors", label: "SDXL 1.0 Refiner", url: hf("stabilityai/stable-diffusion-xl-refiner-1.0", "sd_xl_refiner_1.0.safetensors"), bytes: 6_080_000_000, sha256: "7440042bbdc8a24813002c09b6b69b64dc90fded4472613437b7f55f9b7d9c5f" }]
 };
 
 /**

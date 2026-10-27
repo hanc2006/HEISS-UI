@@ -87,12 +87,23 @@ function remember(entry) {
   recent.splice(8);
 }
 
+/**
+ * Safetensors and GGUF hold only weights. A .pth is a Python pickle, which can
+ * run code when loaded, so it is taken only for upscale models (many exist
+ * only as .pth) and only with a published SHA-256: the catalog's own files,
+ * checked byte for byte before they are put in place.
+ */
+function downloadableName(name, spec) {
+  if (/\.(safetensors|gguf)$/i.test(name)) return true;
+  return /\.pth$/i.test(name) && spec.folder === "upscale_models" && Boolean(catalogSha256(spec));
+}
+
 function targetFor(spec) {
   const modelsDir = comfyModelsDir();
   if (!modelsDir) throw new Error("ComfyUI isn't on this computer. Download the file from the link and add it there.");
   if (!allowedFolders.has(spec.folder)) throw new Error("That file doesn’t belong in a ComfyUI model folder.");
   const name = path.basename(String(spec.file || ""));
-  if (!name || name !== spec.file || !/\.(safetensors|gguf)$/i.test(name)) throw new Error("That isn’t a downloadable model file.");
+  if (!name || name !== spec.file || !downloadableName(name, spec)) throw new Error("That isn’t a downloadable model file.");
   const url = new URL(spec.url);
   if (url.protocol !== "https:" || !allowedHosts.has(url.hostname)) throw new Error("Only Hugging Face downloads are supported.");
   // Land it where ComfyUI itself reads that kind from, so it shows up without a restart.

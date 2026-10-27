@@ -95,3 +95,24 @@ test("If-Range uses a strong ETag, else the date, and nothing for notes from bef
   assert.equal(resumeValidator({ etag: 'W/"abc"', lastModified: "Mon, 01 Jan 2024 00:00:00 GMT" }), "Mon, 01 Jan 2024 00:00:00 GMT");
   assert.equal(resumeValidator({}), "");
 });
+
+test("a .pth comes only as an upscale model with a published SHA-256, and is checked like any other", async () => {
+  const upscaleDir = path.join(scratch, "ComfyUI", "models", "upscale_models");
+  fs.mkdirSync(upscaleDir, { recursive: true });
+  remote.ignoreIfRange = false;
+  remote.body = Buffer.from("0123456789");
+  remote.etag = '"pth"';
+  const pth = (file, folder, sha256) => ({ ...spec(file, sha256), id: `upscale:test:${file}`, folder });
+
+  startDownload(pth("4x-Test.pth", "upscale_models", sha("0123456789")));
+  assert.equal((await settle("4x-Test.pth")).status, "done");
+  assert.equal(fs.readFileSync(path.join(upscaleDir, "4x-Test.pth"), "utf8"), "0123456789");
+
+  startDownload(pth("4x-Wrong.pth", "upscale_models", sha("something else")));
+  assert.equal((await settle("4x-Wrong.pth")).status, "error");
+  assert.ok(!fs.existsSync(path.join(upscaleDir, "4x-Wrong.pth")), "a pickle that doesn't match is never put in place");
+
+  assert.throws(() => startDownload(pth("4x-NoSum.pth", "upscale_models", "")), /isn’t a downloadable model file/);
+  assert.throws(() => startDownload(pth("model.pth", "diffusion_models", sha("0123456789"))), /isn’t a downloadable model file/);
+  assert.throws(() => startDownload(pth("model.pt", "upscale_models", sha("0123456789"))), /isn’t a downloadable model file/);
+});
