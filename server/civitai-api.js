@@ -191,7 +191,7 @@ export function loraRows(items = [], bases = [], { mature = false } = {}) {
       name: String(item.name || ""), version: String(version.name || ""), creator: String(item.creator?.username || ""),
       baseModel: String(version.baseModel || ""), nsfw: Boolean(item.nsfw),
       file: safeFileName(file.name), bytes: Math.round(Number(file.sizeKB || 0) * 1024),
-      trainedWords: (version.trainedWords || []).map(String).filter(Boolean).slice(0, 8),
+      trainedWords: (Array.isArray(version.trainedWords) ? version.trainedWords : []).map((word) => plainText(word, 200)).filter(Boolean).slice(0, 8),
       downloads: Number(item.stats?.downloadCount || 0), preview: previewOf(version, mature),
       page: `${civitaiOrigin()}/models/${Number(item.id)}?modelVersionId=${Number(version.id)}`,
       id: `civitai:${Number(version.id)}:${Number(file.id)}`
@@ -228,6 +228,25 @@ export async function searchLoras({ query = "", family = "", model = "", cursor 
 /* ------------------------------------------------------------ Details */
 
 const text = (value, max = 4000) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+
+/**
+ * Words a person types: a trigger word, a prompt. Some makers paste a JSON
+ * object there instead (a workflow's settings, an edit recipe), which is no
+ * use as either, so it counts as nothing. So does anything that isn't text.
+ */
+export function plainText(value, max = 4000) {
+  const words = text(value, Infinity);
+  if (!words) return "";
+  if (/^[{[]/.test(words)) {
+    try {
+      if (typeof JSON.parse(words) === "object") return "";
+    } catch {
+      // Cut short or not quite JSON, but still shaped like it ("key": value): no words to use.
+      if (/"\s*:/.test(words)) return "";
+    }
+  }
+  return words.slice(0, max);
+}
 const number = (value) => (value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) ? null : Number(value));
 
 /**
@@ -251,7 +270,7 @@ export function strengthOf(version) {
 function madeWith(meta) {
   if (!meta || typeof meta !== "object") return null;
   const made = {
-    prompt: text(meta.prompt), negativePrompt: text(meta.negativePrompt),
+    prompt: plainText(meta.prompt), negativePrompt: plainText(meta.negativePrompt),
     seed: number(meta.seed), steps: number(meta.steps), cfgScale: number(meta.cfgScale),
     sampler: text(meta.sampler, 80), clipSkip: number(meta.clipSkip)
   };
@@ -282,7 +301,7 @@ export async function loraDetails(versionId, options = {}) {
   }));
   return {
     versionId: id, modelId: number(data.modelId), name: text(data.model?.name, 200), version: text(data.name, 200),
-    baseModel: text(data.baseModel, 80), trainedWords: (Array.isArray(data.trainedWords) ? data.trainedWords : []).map((word) => text(word, 200)).filter(Boolean).slice(0, 20),
+    baseModel: text(data.baseModel, 80), trainedWords: [...new Set((Array.isArray(data.trainedWords) ? data.trainedWords : []).map((word) => plainText(word, 200)).filter(Boolean))].slice(0, 20),
     strength: strengthOf(data), images,
     page: `${civitaiOrigin(env)}/models/${number(data.modelId) || ""}?modelVersionId=${id}`
   };

@@ -62,13 +62,17 @@ function LoraCard({ row, state, action, onClose, onRetry }: {
   ].filter((item): item is { label: string; values: string[]; tone?: 'strength' } => Boolean(item));
   const subtitle = [row.creator, row.baseModel, row.version, row.downloads ? `${countLabel(row.downloads)} downloads` : ''].filter(Boolean).join(' · ');
 
-  /** Label on the left, its values as badges on the right, one copy at the end for all of them. */
+  /** Label on the left, its values as badges on the right; each badge copies its own value. */
   const factRow = (label: string, values: string[], tone = '') => (
     <div key={label} className="civitai-fact">
       <dt>{label}</dt>
       <dd>
-        <span className="civitai-fact-values">{values.map((value) => <span key={value} className={cn('civitai-badge', tone && `is-${tone}`)} title={value}>{value}</span>)}</span>
-        <button type="button" className="civitai-card-icon" aria-label={`Copy ${label.toLowerCase()}`} onClick={() => copy(values.join(', '), `fact:${label}`)}><CopyIcon copied={copied === `fact:${label}`} size={12} /></button>
+        {values.map((value) => (
+          <button key={value} type="button" className={cn('civitai-badge', tone && `is-${tone}`)} title={`Copy ${value}`} aria-label={`Copy ${label.toLowerCase()}: ${value}`} onClick={() => copy(value, `${label}:${value}`)}>
+            <span className="civitai-badge-text">{value}</span>
+            <CopyIcon copied={copied === `${label}:${value}`} size={11} />
+          </button>
+        ))}
       </dd>
     </div>
   );
@@ -96,17 +100,11 @@ function LoraCard({ row, state, action, onClose, onRetry }: {
       </div>
 
       {/* Like Civitai's details: what it is on the left, its values on the right. */}
-      {triggers.length ? (
-        <section className="civitai-card-group" aria-label="Triggers">
-          <h4>Triggers</h4>
-          <dl>{factRow('Trigger words', triggers, 'trigger')}</dl>
-        </section>
-      ) : null}
-      {configuration.length ? (
-        <section className="civitai-card-group" aria-label="Configuration">
-          <h4>Configuration</h4>
-          <dl>{configuration.map((item) => factRow(item.label, item.values, item.tone))}</dl>
-        </section>
+      {triggers.length || configuration.length ? (
+        <dl className="civitai-card-facts">
+          {triggers.length ? factRow('Trigger words', triggers, 'trigger') : null}
+          {configuration.map((item) => factRow(item.label, item.values, item.tone))}
+        </dl>
       ) : null}
 
       {state?.loading ? <div className="civitai-loading"><Loader2 size={14} className="spin" /> Reading from Civitai…</div> : null}

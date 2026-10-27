@@ -194,6 +194,25 @@ test("details: no usage tips when Civitai sends none; the version's own previews
   assert.equal(civitai.strengthOf({ settings: { strength: "abc" } }), null);
 });
 
+test("a JSON object where words belong is no trigger word and no prompt; anything not text neither", async () => {
+  const recipe = '{ "task": "head_swap", "base_image": { "source": "Image 1", "preserve": ["lighting"] } }';
+  assert.equal(civitai.plainText(recipe), "");
+  assert.equal(civitai.plainText('{ "task": "head_swap", "base_image": { "sou'), "", "cut short, still not words");
+  assert.equal(civitai.plainText("[1, 2]"), "");
+  assert.equal(civitai.plainText({ task: "x" }), "");
+  assert.equal(civitai.plainText(42), "");
+  assert.equal(civitai.plainText("  L3N0V0 "), "L3N0V0");
+  assert.equal(civitai.plainText("[cinematic] photo, film grain"), "[cinematic] photo, film grain", "brackets in ordinary words are fine");
+
+  const transport = async (url) => new Response(JSON.stringify(url.pathname === "/api/v1/images"
+    ? { items: [{ url: "https://image.civitai.com/k/a/width=450/a.jpeg", type: "image", nsfwLevel: 1, meta: { prompt: recipe, seed: 7 } }] }
+    : { id: 5, modelId: 1, model: { name: "BFS" }, trainedWords: [recipe, "k0r3an", { word: "x" }, "k0r3an"] }), { status: 200 });
+  const details = await civitai.loraDetails(5, { transport, env: {} });
+  assert.deepEqual(details.trainedWords, ["k0r3an"]);
+  assert.equal(details.images[0].made.prompt, "", "the seed stays; the JSON prompt doesn't");
+  assert.equal(details.images[0].made.seed, 7);
+});
+
 test("Civitai out of reach says so, with the cause, not Node's 'fetch failed'", async () => {
   const transport = async () => { throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } }); };
   await assert.rejects(civitai.searchLoras({ family: "sdxl" }, { transport, env: {} }), /couldn’t be reached at civitai\.com \(ENOTFOUND\)/);
