@@ -610,8 +610,9 @@
 }
 .civitai-card-media {
   position: relative;
-  flex: 1 0 240px;
-  max-height: 480px;
+  /* One height for every picture, whatever its shape; cover fills it. */
+  flex: none;
+  height: 300px;
   border-radius: calc(var(--r-item) - 2px);
   overflow: hidden;
   background: rgb(0 0 0 / .35);
@@ -648,12 +649,19 @@
   font-variant-numeric: tabular-nums;
 }
 .civitai-card-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.civitai-card-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Civitai's details table, without its lines: label left, value right. */
-.civitai-card-facts { display: grid; gap: 10px; margin: 0; }
-.civitai-card-facts > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
-.civitai-card-facts dt { flex: none; font-size: 12.5px; color: hsl(var(--muted-foreground)); }
-.civitai-card-facts dd { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; margin: 0; }
+.civitai-card-name { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.civitai-card-title { min-width: 0; font-size: 14px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.civitai-card-name > span { font-size: 11.5px; color: hsl(var(--muted-foreground)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Civitai's details, without its lines: groups of rows, label left and top, values right. */
+.civitai-card-group { display: grid; gap: 8px; min-width: 0; }
+.civitai-card-group h4 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: hsl(var(--muted-foreground) / .8); }
+.civitai-card-group dl { display: grid; gap: 8px; margin: 0; }
+.civitai-fact { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; }
+.civitai-fact dt { flex: none; padding-top: 4px; font-size: 12.5px; line-height: 1.3; color: hsl(var(--muted-foreground)); }
+/* Values side by side, wrapping to the next line when they run out of room; the copy comes last. */
+.civitai-fact dd { flex: 1; min-width: 0; display: flex; align-items: flex-start; justify-content: flex-end; gap: 4px; margin: 0; }
+.civitai-fact-values { min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; }
+.civitai-fact dd .civitai-card-icon { width: 24px; height: 24px; flex: none; }
 .civitai-badge {
   display: inline-flex;
   align-items: center;
@@ -666,13 +674,17 @@
   color: hsl(var(--foreground) / .85);
   font: 600 11px/1.5 var(--font-mono, ui-monospace, monospace);
   letter-spacing: .02em;
+  text-align: left;
+  /* A long one (some makers paste a whole prompt) stops at two lines; copy still takes all of it. */
+  display: -webkit-inline-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
   overflow-wrap: anywhere;
 }
 .civitai-badge.is-strength { background: rgb(34 211 238 / .12); color: #67e8f9; text-transform: uppercase; }
 /* Trigger words keep their case: it matters to the LoRA. */
-.civitai-badge.is-trigger { cursor: pointer; background: rgb(168 85 247 / .16); color: #d8b4fe; }
-.civitai-badge.is-trigger:hover { background: rgb(168 85 247 / .26); }
-.civitai-badge span { overflow-wrap: anywhere; }
+.civitai-badge.is-trigger { background: rgb(168 85 247 / .16); color: #d8b4fe; }
 .civitai-card-prompt { display: grid; gap: 4px; min-width: 0; }
 .civitai-card-prompt-head { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: hsl(var(--muted-foreground)); }
 .civitai-card-prompt p { margin: 0; font-size: 12.5px; line-height: 1.5; color: hsl(var(--foreground) / .85); overflow-wrap: anywhere; }
@@ -682,6 +694,9 @@
 .civitai-card-icon:hover { background: var(--control-hover); color: hsl(var(--foreground)); }
 .civitai-card-link { justify-self: start; padding: 0; border: 0; background: none; color: var(--ember); font-size: 12px; cursor: pointer; }
 .civitai-card-note { margin: 0; font-size: 12px; color: hsl(var(--muted-foreground)); }
+/* Civitai's own page, at the bottom right of the card. */
+.civitai-card-open { margin-top: auto; align-self: flex-end; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: hsl(var(--muted-foreground)); text-decoration: none; }
+.civitai-card-open:hover { color: hsl(var(--foreground)); }
 
 .lora-picker-foot { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 10px; box-shadow: inset 0 1px 0 var(--surface-border); }
 .lora-picker-foot > span { font-size: 11.5px; color: hsl(var(--muted-foreground)); }

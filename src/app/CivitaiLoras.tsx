@@ -1,5 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, Download, Loader2, Plus, RotateCw, Search, X } from 'lucide-react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, Plus, RotateCw, Search, X } from 'lucide-react';
 import { loadLoraDetails, searchCivitaiLoras, type CivitaiLora, type CivitaiLoraDetails } from './civitai';
 import { copyText } from './api';
 import { CopyIcon, useCopyFeedback } from './CopyFeedback';
@@ -17,6 +17,13 @@ function sizeLabel(bytes: number) {
 }
 
 const baseName = (name: string) => name.split(/[\\/]/).pop() || name;
+
+/** 1234 → "1.2K", like Civitai. */
+function countLabel(count: number) {
+  if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
+  if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
+  return String(count);
+}
 
 
 type DetailsState = { loading: true } | { loading: false; error: string } | { loading: false; details: CivitaiLoraDetails };
@@ -43,11 +50,28 @@ function LoraCard({ row, state, action, onClose, onRetry }: {
   const step = (by: number) => { setIndex((value) => (value + by + images.length) % images.length); setExpanded(false); };
   const copy = (value: string, key: string) => copyWith(() => copyText(value), key);
   const strength = details?.strength;
-  // How the picture on show was made, when its maker shared it.
-  const configuration = made ? [
-    made.sampler, made.steps !== null ? `Steps: ${made.steps}` : '', made.cfgScale !== null ? `CFG: ${made.cfgScale}` : '',
-    made.seed !== null ? `Seed: ${made.seed}` : '', made.clipSkip !== null ? `Clip skip: ${made.clipSkip}` : ''
-  ].filter(Boolean) : [];
+  const triggers = details?.trainedWords || [];
+  // The maker's usage tips, then how the picture on show was made (when its maker shared it).
+  const configuration: Array<{ label: string; values: string[]; tone?: 'strength' }> = [
+    strength ? { label: 'Strength', values: [String(strength.value), ...(strength.min !== null && strength.max !== null ? [`${strength.min}–${strength.max}`] : [])], tone: 'strength' as const } : null,
+    made?.sampler ? { label: 'Sampler', values: [made.sampler] } : null,
+    made && made.steps !== null ? { label: 'Steps', values: [String(made.steps)] } : null,
+    made && made.cfgScale !== null ? { label: 'CFG scale', values: [String(made.cfgScale)] } : null,
+    made && made.seed !== null ? { label: 'Seed', values: [String(made.seed)] } : null,
+    made && made.clipSkip !== null ? { label: 'Clip skip', values: [String(made.clipSkip)] } : null
+  ].filter((item): item is { label: string; values: string[]; tone?: 'strength' } => Boolean(item));
+  const subtitle = [row.creator, row.baseModel, row.version, row.downloads ? `${countLabel(row.downloads)} downloads` : ''].filter(Boolean).join(' · ');
+
+  /** Label on the left, its values as badges on the right, one copy at the end for all of them. */
+  const factRow = (label: string, values: string[], tone = '') => (
+    <div key={label} className="civitai-fact">
+      <dt>{label}</dt>
+      <dd>
+        <span className="civitai-fact-values">{values.map((value) => <span key={value} className={cn('civitai-badge', tone && `is-${tone}`)} title={value}>{value}</span>)}</span>
+        <button type="button" className="civitai-card-icon" aria-label={`Copy ${label.toLowerCase()}`} onClick={() => copy(values.join(', '), `fact:${label}`)}><CopyIcon copied={copied === `fact:${label}`} size={12} /></button>
+      </dd>
+    </div>
+  );
 
   return (
     <section className="civitai-card" aria-label={`${row.name} on Civitai`}>
@@ -64,37 +88,26 @@ function LoraCard({ row, state, action, onClose, onRetry }: {
       </div>
 
       <div className="civitai-card-head">
-        <strong className="civitai-card-title" title={row.name}>{row.name}</strong>
+        <div className="civitai-card-name">
+          <strong className="civitai-card-title" title={row.name}>{row.name}</strong>
+          {subtitle ? <span title={subtitle}>{subtitle}</span> : null}
+        </div>
         {action}
       </div>
 
-      {/* Like Civitai's details: what it is on the left, its value on the right. */}
-      <dl className="civitai-card-facts">
-        {strength ? (
-          <div>
-            <dt>Usage tips</dt>
-            <dd><span className="civitai-badge is-strength">Strength: {strength.value}</span>{strength.min !== null && strength.max !== null ? <span className="civitai-badge is-strength">{strength.min}–{strength.max}</span> : null}</dd>
-          </div>
-        ) : null}
-        {details?.trainedWords.length ? (
-          <div>
-            <dt>Trigger words</dt>
-            <dd>
-              {details.trainedWords.map((word) => (
-                <button key={word} type="button" className="civitai-badge is-trigger" title="Copy" onClick={() => copy(word, `word:${word}`)}>
-                  <span>{word}</span><CopyIcon copied={copied === `word:${word}`} size={12} />
-                </button>
-              ))}
-            </dd>
-          </div>
-        ) : null}
-        {configuration.length ? (
-          <div>
-            <dt>Configuration</dt>
-            <dd>{configuration.map((value) => <span key={value} className="civitai-badge">{value}</span>)}</dd>
-          </div>
-        ) : null}
-      </dl>
+      {/* Like Civitai's details: what it is on the left, its values on the right. */}
+      {triggers.length ? (
+        <section className="civitai-card-group" aria-label="Triggers">
+          <h4>Triggers</h4>
+          <dl>{factRow('Trigger words', triggers, 'trigger')}</dl>
+        </section>
+      ) : null}
+      {configuration.length ? (
+        <section className="civitai-card-group" aria-label="Configuration">
+          <h4>Configuration</h4>
+          <dl>{configuration.map((item) => factRow(item.label, item.values, item.tone))}</dl>
+        </section>
+      ) : null}
 
       {state?.loading ? <div className="civitai-loading"><Loader2 size={14} className="spin" /> Reading from Civitai…</div> : null}
       {state && !state.loading && 'error' in state ? (
@@ -112,6 +125,8 @@ function LoraCard({ row, state, action, onClose, onRetry }: {
           {made.negativePrompt && expanded ? <p className="civitai-card-negative"><em>Negative</em> {made.negativePrompt}</p> : null}
         </div>
       ) : details && image ? <p className="civitai-card-note">No prompt shared for this picture.</p> : null}
+
+      <a className="civitai-card-open" href={details?.page || row.page} target="_blank" rel="noreferrer noopener">Open on Civitai <ExternalLink size={12} /></a>
     </section>
   );
 }
