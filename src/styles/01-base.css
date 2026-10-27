@@ -388,7 +388,9 @@ input.is-framed:focus-visible {
 
 .sidebar-body {
   flex: 1;
-  overflow: auto;
+  /* Up and down only: lists that bleed into the edges (the LoRA picker's rows) must not scroll it sideways. */
+  overflow-x: hidden;
+  overflow-y: auto;
   overscroll-behavior: contain;
   display: flex;
   flex-direction: column;

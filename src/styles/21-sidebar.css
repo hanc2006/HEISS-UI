@@ -549,8 +549,12 @@
 /* The picker's two sources: this computer, and Civitai (CivitaiLoras.tsx). */
 .lora-source .segmented { width: 100%; }
 .lora-source .segmented button { flex: 1; }
-.civitai-row { cursor: default; padding-left: 4px; }
-.civitai-row:hover { background: var(--control-fill); }
+/* Rows never push the list sideways: everything in them shrinks or ellipsizes. */
+.civitai-list { overflow-x: hidden; }
+.civitai-row { cursor: pointer; padding: 4px; min-width: 0; }
+.civitai-row:hover, .civitai-row:focus-visible { background: var(--control-fill); }
+.civitai-row.is-open { background: rgb(255 255 255 / .09); }
+.civitai-row:focus-visible { outline: 2px solid var(--ember); outline-offset: -2px; }
 .civitai-thumb {
   flex: none;
   width: 40px;
@@ -564,10 +568,98 @@
 .civitai-row .lora-option-copy .civitai-error { white-space: normal; color: var(--ember); }
 .civitai-action { flex: none; height: 30px; min-height: 30px; padding: 0 10px; gap: 6px; font-size: 12px; }
 .civitai-progress { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
-.civitai-row:hover .civitai-page, .civitai-page:focus-visible { opacity: 1; }
 .civitai-loading { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 0; font-size: 12.5px; color: hsl(var(--muted-foreground)); }
 .civitai-more { width: 100%; margin-top: 4px; }
 .lora-picker-heading.is-static em { font-style: normal; opacity: .6; text-transform: none; }
+
+/* A LoRA's card, above the list: pictures, usage tips, trigger words, prompt. */
+.lora-picker.has-card { max-height: min(86dvh, 820px); }
+.civitai-card {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 10px;
+  padding: 8px;
+  border-radius: var(--r-item);
+  background: rgb(255 255 255 / .04);
+  border: 1px solid var(--surface-border);
+  min-width: 0;
+}
+.civitai-card-media {
+  position: relative;
+  height: 220px;
+  border-radius: calc(var(--r-item) - 2px);
+  overflow: hidden;
+  background: rgb(0 0 0 / .35);
+}
+.civitai-card-media img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.civitai-card-step, .civitai-card-close {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: rgb(0 0 0 / .55);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(6px);
+}
+.civitai-card-step { top: 50%; transform: translateY(-50%); }
+.civitai-card-step.is-prev { left: 6px; }
+.civitai-card-step.is-next { right: 6px; }
+.civitai-card-close { top: 6px; right: 6px; }
+.civitai-card-step:hover, .civitai-card-close:hover { background: rgb(0 0 0 / .75); }
+.civitai-card-count {
+  position: absolute;
+  bottom: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: var(--r-pill);
+  background: rgb(0 0 0 / .55);
+  color: #fff;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.civitai-card-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.civitai-card-title { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.civitai-card-title strong { font-size: 14px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.civitai-card-title span { font-size: 11.5px; color: hsl(var(--muted-foreground)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.civitai-card-head > em { flex: none; font-size: 11px; font-style: normal; color: hsl(var(--muted-foreground)); }
+.civitai-card-facts { display: grid; gap: 6px; margin: 0; }
+.civitai-card-facts > div { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.civitai-card-facts dt { flex: none; width: 92px; font-size: 11.5px; color: hsl(var(--muted-foreground)); }
+.civitai-card-facts dd { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 5px; margin: 0; }
+.civitai-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 100%;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: rgb(255 255 255 / .07);
+  color: hsl(var(--foreground) / .85);
+  font: 600 11px/1.6 var(--font-mono, ui-monospace, monospace);
+  letter-spacing: .02em;
+  overflow-wrap: anywhere;
+}
+.civitai-chip.is-trigger { cursor: pointer; background: color-mix(in srgb, var(--ember) 16%, transparent); color: hsl(var(--foreground)); }
+.civitai-chip.is-trigger:hover { background: color-mix(in srgb, var(--ember) 26%, transparent); }
+.civitai-chip span { overflow-wrap: anywhere; }
+.civitai-card-prompt { display: grid; gap: 4px; min-width: 0; }
+.civitai-card-prompt-head { display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; color: hsl(var(--muted-foreground)); }
+.civitai-card-prompt p { margin: 0; font-size: 12.5px; line-height: 1.5; color: hsl(var(--foreground) / .85); overflow-wrap: anywhere; }
+.civitai-card-prompt p.is-clamped { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.civitai-card-negative em { font-style: normal; color: hsl(var(--muted-foreground)); margin-right: 4px; }
+.civitai-card-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
+.civitai-card-icon { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: var(--r-pill); background: transparent; color: inherit; cursor: pointer; }
+.civitai-card-icon:hover { background: var(--control-hover); color: hsl(var(--foreground)); }
+.civitai-card-link { justify-self: start; padding: 0; border: 0; background: none; color: var(--ember); font-size: 12px; cursor: pointer; }
+.civitai-card-note { margin: 0; font-size: 12px; color: hsl(var(--muted-foreground)); }
+.civitai-card-open { display: inline-flex; align-items: center; gap: 6px; justify-self: start; font-size: 12px; color: hsl(var(--muted-foreground)); text-decoration: none; }
+.civitai-card-open:hover { color: hsl(var(--foreground)); }
 
 .lora-picker-foot { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 10px; box-shadow: inset 0 1px 0 var(--surface-border); }
 .lora-picker-foot > span { font-size: 11.5px; color: hsl(var(--muted-foreground)); }

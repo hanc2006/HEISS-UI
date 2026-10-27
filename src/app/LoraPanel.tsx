@@ -197,6 +197,8 @@ function LoraPicker({ options, profile, fitOf, baseOf, current, favorites, recen
 }) {
   // Replacing a LoRA picks from this computer; adding can also fetch one from Civitai.
   const [source, setSource] = useState<PickerSource>(swapping ? 'local' : startOn);
+  // A Civitai card open above the list: the picker grows to keep the list usable.
+  const [cardOpen, setCardOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [highlight, setHighlight] = useState(0);
@@ -239,7 +241,7 @@ function LoraPicker({ options, profile, fitOf, baseOf, current, favorites, recen
 
   let rowIndex = -1;
   return (
-    <div className="lora-picker" role="dialog" aria-label={swapping ? 'Replace LoRA' : 'Add LoRAs'}>
+    <div className={cn('lora-picker', source === 'civitai' && cardOpen && 'has-card')} role="dialog" aria-label={swapping ? 'Replace LoRA' : 'Add LoRAs'}>
       <div className="lora-picker-head">
         <button type="button" className="btn is-ghost lora-picker-back" onClick={onClose}><ArrowLeft size={14} /> Back</button>
         <span>{swapping ? <>Replace <strong>{fileName(swapping)}</strong></> : remaining > 0 ? `Add up to ${remaining}` : 'Stack is full'}</span>
@@ -255,7 +257,7 @@ function LoraPicker({ options, profile, fitOf, baseOf, current, favorites, recen
         </div>
       ) : null}
       {source === 'civitai' ? (
-        <CivitaiLoras profile={profile} options={options} current={current} remaining={remaining} onAdd={onAdd} onLibraryChanged={onLibraryChanged} />
+        <CivitaiLoras profile={profile} options={options} current={current} remaining={remaining} onAdd={onAdd} onLibraryChanged={onLibraryChanged} onCardChange={setCardOpen} />
       ) : (<>
       <label className="lora-picker-search">
         <Search size={14} />

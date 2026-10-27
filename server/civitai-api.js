@@ -166,11 +166,17 @@ function loraFile(version) {
   return usable.find((file) => file.primary) || usable[0] || null;
 }
 
+/** Pictures (not videos) this setting may show: mature ones only with the switch on. */
+function showable(images, mature) {
+  return (Array.isArray(images) ? images : []).filter((image) => image?.url && image.type !== "video" && isCivitaiImage(image.url) && (mature || !(Number(image.nsfwLevel) > 1)));
+}
+
+// Civitai serves any width from the same address (…/width=450/… or …/original=true/…).
+const sized = (url, width) => String(url).replace(/\/(?:width=\d+|original=true)\//, `/width=${width}/`);
+
 function previewOf(version, mature) {
-  const images = (Array.isArray(version?.images) ? version.images : []).filter((image) => image?.url && image.type !== "video" && (mature || !(Number(image.nsfwLevel) > 1)));
-  const url = String(images[0]?.url || "");
-  // Civitai serves any width from the same address; a small one is enough for a row.
-  return isCivitaiImage(url) ? url.replace(/\/(?:width=\d+|original=true)\//, "/width=160/") : "";
+  const [first] = showable(version?.images, mature);
+  return first ? sized(first.url, 160) : "";
 }
 
 /** One row per model: its newest version made for one of `bases`, with a usable file. */
@@ -217,6 +223,69 @@ export async function searchLoras({ query = "", family = "", model = "", cursor 
     if (rows.length || !next) return { bases, rows, nextCursor: next, site: new URL(civitaiOrigin(env)).hostname };
   }
   return { bases, rows: [], nextCursor: next, site: new URL(civitaiOrigin(env)).hostname };
+}
+
+/* ------------------------------------------------------------ Details */
+
+const text = (value, max = 4000) => (typeof value === "string" ? value.trim().slice(0, max) : "");
+const number = (value) => (value === null || value === undefined || value === "" || !Number.isFinite(Number(value)) ? null : Number(value));
+
+/**
+ * The strength the maker recommends, when Civitai sends one. Civitai keeps it
+ * (strength, minStrength, maxStrength) but its public API docs don't list it,
+ * so it is read where it may appear and left out when it doesn't.
+ */
+export function strengthOf(version) {
+  for (const source of [version?.recommendedSettings, version?.settings, version]) {
+    const value = number(source?.strength);
+    if (value !== null && value >= -10 && value <= 10) {
+      const min = number(source.minStrength);
+      const max = number(source.maxStrength);
+      return { value, min: min !== null && min <= value ? min : null, max: max !== null && max >= value ? max : null };
+    }
+  }
+  return null;
+}
+
+/** What a picture was made with, when its maker shared it (Civitai's image `meta`, free-form). */
+function madeWith(meta) {
+  if (!meta || typeof meta !== "object") return null;
+  const made = {
+    prompt: text(meta.prompt), negativePrompt: text(meta.negativePrompt),
+    seed: number(meta.seed), steps: number(meta.steps), cfgScale: number(meta.cfgScale),
+    sampler: text(meta.sampler, 80), clipSkip: number(meta.clipSkip)
+  };
+  return made.prompt || made.negativePrompt || made.seed !== null ? made : null;
+}
+
+/**
+ * One LoRA version for the details card: its pictures with how they were made,
+ * trigger words and usage tips. The version and its pictures are asked for
+ * together; without the pictures (that call failed) the version's own previews
+ * show, without prompts.
+ */
+export async function loraDetails(versionId, options = {}) {
+  const id = Number(versionId);
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
+  const env = options.env || process.env;
+  const mature = civitaiMature(env);
+  const params = new URLSearchParams({ modelVersionId: String(id), limit: "12", withMeta: "true", sort: "Most Reactions", nsfw: String(mature) });
+  const [version, pictures] = await Promise.allSettled([
+    civitaiJson(`/api/v1/model-versions/${id}`, { env, transport: options.transport }),
+    civitaiJson(`/api/v1/images?${params}`, { env, transport: options.transport })
+  ]);
+  if (version.status === "rejected") throw version.reason;
+  const data = version.value || {};
+  const fromImages = pictures.status === "fulfilled" ? showable(pictures.value?.items, mature) : [];
+  const images = (fromImages.length ? fromImages : showable(data.images, mature)).slice(0, 12).map((image) => ({
+    url: sized(image.url, 640), width: number(image.width), height: number(image.height), made: madeWith(image.meta)
+  }));
+  return {
+    versionId: id, modelId: number(data.modelId), name: text(data.model?.name, 200), version: text(data.name, 200),
+    baseModel: text(data.baseModel, 80), trainedWords: (Array.isArray(data.trainedWords) ? data.trainedWords : []).map((word) => text(word, 200)).filter(Boolean).slice(0, 20),
+    strength: strengthOf(data), images,
+    page: `${civitaiOrigin(env)}/models/${number(data.modelId) || ""}?modelVersionId=${id}`
+  };
 }
 
 /* ------------------------------------------------------------ Download */

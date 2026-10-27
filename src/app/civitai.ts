@@ -27,6 +27,27 @@ export type CivitaiSearch = {
   unsupported?: boolean;
 };
 
+/** How a picture was made, when its maker shared it. */
+export type CivitaiMade = { prompt: string; negativePrompt: string; seed: number | null; steps: number | null; cfgScale: number | null; sampler: string; clipSkip: number | null };
+
+/** One LoRA version for the details card (server/civitai-api.js loraDetails). */
+export type CivitaiLoraDetails = {
+  versionId: number;
+  modelId: number | null;
+  name: string;
+  version: string;
+  baseModel: string;
+  trainedWords: string[];
+  /** The maker's recommended strength, when Civitai sends one. */
+  strength: { value: number; min: number | null; max: number | null } | null;
+  images: Array<{ url: string; width: number | null; height: number | null; made: CivitaiMade | null }>;
+  page: string;
+};
+
+export function loadLoraDetails(versionId: number, signal?: AbortSignal) {
+  return apiJson<CivitaiLoraDetails>(`/api/civitai/loras/${versionId}`, { signal });
+}
+
 export type CivitaiStatus = {
   set: boolean;
   source: '' | 'settings' | 'environment';

@@ -45,7 +45,7 @@ import { jobs, queueClearsAt, runJob, runMockJob, setTerminalJob } from './jobs.
 import { cancelPrompt, cancelPrompts } from './comfy-queue.js';
 import { loraInfos } from './lora-info.js';
 import { hfEndpoint, hfTokenStatus, saveHfToken } from './hf-access.js';
-import { civitaiDownload, civitaiStatus, saveCivitaiMature, saveCivitaiToken, searchLoras } from './civitai-api.js';
+import { civitaiDownload, civitaiStatus, loraDetails, saveCivitaiMature, saveCivitaiToken, searchLoras } from './civitai-api.js';
 import { deleteImportedWorkflow, getCustomWorkflow, saveImportedWorkflow, userWorkflowsDir, validateGraph } from './custom-workflows.js';
 import { applyBundles, createBundles, DEFAULT_COOLDOWN_MINUTES, dissolveBundle, listBundles, pendingSummary, setBundleCover } from './gallery-bundles.js';
 import { galleryStats } from './stats.js';
@@ -1006,6 +1006,17 @@ app.get("/api/civitai/loras", async (req, res) => {
     res.json({ ok: true, ...(await searchLoras({ query: String(query), family: String(family), model: String(model), cursor: String(cursor) })) });
   } catch (error) {
     res.status(error.status === 401 || error.status === 403 ? 403 : 502).json({ ok: false, error: error.message });
+  }
+});
+
+// One LoRA's details card: its pictures and how they were made, trigger words, usage tips.
+app.get("/api/civitai/loras/:versionId", async (req, res) => {
+  try {
+    const details = await loraDetails(String(req.params.versionId));
+    if (!details) return res.status(400).json({ ok: false, error: "Unknown LoRA." });
+    res.json({ ok: true, ...details });
+  } catch (error) {
+    res.status(error.status === 401 || error.status === 403 ? 403 : error.status === 404 ? 404 : 502).json({ ok: false, error: error.message });
   }
 });
 

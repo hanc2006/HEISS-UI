@@ -156,6 +156,44 @@ test("a download is read again from Civitai: its own address (on the active site
   assert.equal(await civitai.civitaiDownload("civitai:../x:1", { transport, env: {} }), null);
 });
 
+test("details: the version and its pictures with prompts, asked for together; mature ones only with the switch", async () => {
+  const seen = [];
+  const transport = async (url) => {
+    seen.push(url);
+    const body = url.pathname === "/api/v1/images"
+      ? { items: [
+        { url: "https://image.civitai.com/k/a/original=true/a.jpeg", type: "image", nsfwLevel: 1, width: 832, height: 1216, meta: { prompt: "a lighthouse at dusk", negativePrompt: "blurry", seed: 413271325284305, steps: 28, cfgScale: 3.5, sampler: "Euler", extra: { nested: true } } },
+        { url: "https://image.civitai.com/k/b/original=true/b.jpeg", type: "image", nsfwLevel: 8, meta: { prompt: "mature" } },
+        { url: "https://image.civitai.com/k/c/original=true/c.mp4", type: "video", nsfwLevel: 1 },
+        { url: "https://elsewhere.example/d.jpeg", type: "image", nsfwLevel: 1 }
+      ] }
+      : { id: 22, modelId: 2, name: "v1.0", baseModel: "Flux.2 D", model: { name: "Ink" }, trainedWords: ["L3N0V0", " "], settings: { strength: 0.9, minStrength: 0.6, maxStrength: 1.2 } };
+    return new Response(JSON.stringify(body), { status: 200 });
+  };
+  const details = await civitai.loraDetails("22", { transport, env: {} });
+  assert.deepEqual(seen.map((url) => url.pathname).sort(), ["/api/v1/images", "/api/v1/model-versions/22"]);
+  const images = seen.find((url) => url.pathname === "/api/v1/images").searchParams;
+  assert.deepEqual([images.get("modelVersionId"), images.get("withMeta"), images.get("nsfw")], ["22", "true", "false"]);
+  assert.deepEqual(details.trainedWords, ["L3N0V0"]);
+  assert.deepEqual(details.strength, { value: 0.9, min: 0.6, max: 1.2 });
+  assert.equal(details.images.length, 1, "no mature picture, no video, nothing from another host");
+  assert.equal(details.images[0].url, "https://image.civitai.com/k/a/width=640/a.jpeg");
+  assert.deepEqual(details.images[0].made, { prompt: "a lighthouse at dusk", negativePrompt: "blurry", seed: 413271325284305, steps: 28, cfgScale: 3.5, sampler: "Euler", clipSkip: null });
+  assert.equal(details.page, "https://civitai.com/models/2?modelVersionId=22");
+  assert.equal(await civitai.loraDetails("not-a-number", { transport, env: {} }), null);
+});
+
+test("details: no usage tips when Civitai sends none; the version's own previews when the pictures call fails", async () => {
+  const transport = async (url) => (url.pathname === "/api/v1/images"
+    ? new Response("{}", { status: 500 })
+    : new Response(JSON.stringify({ id: 9, modelId: 1, model: { name: "Plain" }, trainedWords: [], images: [{ url: "https://image.civitai.com/k/p/width=450/p.jpeg", type: "image", nsfwLevel: 1 }] }), { status: 200 }));
+  const details = await civitai.loraDetails(9, { transport, env: {} });
+  assert.equal(details.strength, null);
+  assert.deepEqual(details.images, [{ url: "https://image.civitai.com/k/p/width=640/p.jpeg", width: null, height: null, made: null }]);
+  assert.equal(civitai.strengthOf({ strength: 0.8 }).value, 0.8);
+  assert.equal(civitai.strengthOf({ settings: { strength: "abc" } }), null);
+});
+
 test("Civitai out of reach says so, with the cause, not Node's 'fetch failed'", async () => {
   const transport = async () => { throw Object.assign(new TypeError("fetch failed"), { cause: { code: "ENOTFOUND" } }); };
   await assert.rejects(civitai.searchLoras({ family: "sdxl" }, { transport, env: {} }), /couldn’t be reached at civitai\.com \(ENOTFOUND\)/);
