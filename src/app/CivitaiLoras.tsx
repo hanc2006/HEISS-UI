@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, Plus, RotateCw, Search, X } from 'lucide-react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { AlertTriangle, ChevronLeft, ChevronRight, Download, Loader2, Plus, RotateCw, Search, X } from 'lucide-react';
 import { loadLoraDetails, searchCivitaiLoras, type CivitaiLora, type CivitaiLoraDetails } from './civitai';
 import { copyText } from './api';
 import { CopyIcon, useCopyFeedback } from './CopyFeedback';
@@ -17,6 +17,7 @@ function sizeLabel(bytes: number) {
 }
 
 const baseName = (name: string) => name.split(/[\\/]/).pop() || name;
+
 
 type DetailsState = { loading: true } | { loading: false; error: string } | { loading: false; details: CivitaiLoraDetails };
 
@@ -42,9 +43,10 @@ function LoraCard({ row, state, action, onClose, onRetry }: {
   const step = (by: number) => { setIndex((value) => (value + by + images.length) % images.length); setExpanded(false); };
   const copy = (value: string, key: string) => copyWith(() => copyText(value), key);
   const strength = details?.strength;
-  const facts = made ? [
-    made.seed !== null ? `Seed ${made.seed}` : '', made.steps !== null ? `${made.steps} steps` : '',
-    made.cfgScale !== null ? `CFG ${made.cfgScale}` : '', made.sampler, made.clipSkip !== null ? `Clip skip ${made.clipSkip}` : ''
+  // How the picture on show was made, when its maker shared it.
+  const configuration = made ? [
+    made.sampler, made.steps !== null ? `Steps: ${made.steps}` : '', made.cfgScale !== null ? `CFG: ${made.cfgScale}` : '',
+    made.seed !== null ? `Seed: ${made.seed}` : '', made.clipSkip !== null ? `Clip skip: ${made.clipSkip}` : ''
   ].filter(Boolean) : [];
 
   return (
@@ -62,36 +64,41 @@ function LoraCard({ row, state, action, onClose, onRetry }: {
       </div>
 
       <div className="civitai-card-head">
-        <div className="civitai-card-title">
-          <strong title={row.name}>{row.name}</strong>
-          <span>{[row.creator, row.baseModel, row.version].filter(Boolean).join(' · ')}</span>
-        </div>
+        <strong className="civitai-card-title" title={row.name}>{row.name}</strong>
         {action}
       </div>
+
+      {/* Like Civitai's details: what it is on the left, its value on the right. */}
+      <dl className="civitai-card-facts">
+        {strength ? (
+          <div>
+            <dt>Usage tips</dt>
+            <dd><span className="civitai-badge is-strength">Strength: {strength.value}</span>{strength.min !== null && strength.max !== null ? <span className="civitai-badge is-strength">{strength.min}–{strength.max}</span> : null}</dd>
+          </div>
+        ) : null}
+        {details?.trainedWords.length ? (
+          <div>
+            <dt>Trigger words</dt>
+            <dd>
+              {details.trainedWords.map((word) => (
+                <button key={word} type="button" className="civitai-badge is-trigger" title="Copy" onClick={() => copy(word, `word:${word}`)}>
+                  <span>{word}</span><CopyIcon copied={copied === `word:${word}`} size={12} />
+                </button>
+              ))}
+            </dd>
+          </div>
+        ) : null}
+        {configuration.length ? (
+          <div>
+            <dt>Configuration</dt>
+            <dd>{configuration.map((value) => <span key={value} className="civitai-badge">{value}</span>)}</dd>
+          </div>
+        ) : null}
+      </dl>
 
       {state?.loading ? <div className="civitai-loading"><Loader2 size={14} className="spin" /> Reading from Civitai…</div> : null}
       {state && !state.loading && 'error' in state ? (
         <p className="civitai-card-note">{state.error} <button type="button" className="civitai-card-link" onClick={onRetry}>Try again</button></p>
-      ) : null}
-
-      {details ? (
-        <dl className="civitai-card-facts">
-          {strength ? (
-            <div><dt>Usage tips</dt><dd><span className="civitai-chip">Strength {strength.value}{strength.min !== null && strength.max !== null ? ` · ${strength.min}–${strength.max}` : ''}</span></dd></div>
-          ) : null}
-          {details.trainedWords.length ? (
-            <div>
-              <dt>Trigger words</dt>
-              <dd>
-                {details.trainedWords.map((word) => (
-                  <button key={word} type="button" className="civitai-chip is-trigger" title="Copy" onClick={() => copy(word, `word:${word}`)}>
-                    <span>{word}</span><CopyIcon copied={copied === `word:${word}`} size={12} />
-                  </button>
-                ))}
-              </dd>
-            </div>
-          ) : null}
-        </dl>
       ) : null}
 
       {details && made?.prompt ? (
@@ -103,11 +110,8 @@ function LoraCard({ row, state, action, onClose, onRetry }: {
           <p className={cn(!expanded && 'is-clamped')}>{made.prompt}</p>
           {made.prompt.length > 180 ? <button type="button" className="civitai-card-link" onClick={() => setExpanded((value) => !value)}>{expanded ? 'Show less' : 'Show more'}</button> : null}
           {made.negativePrompt && expanded ? <p className="civitai-card-negative"><em>Negative</em> {made.negativePrompt}</p> : null}
-          {facts.length ? <div className="civitai-card-meta">{facts.map((fact) => <span key={fact} className="civitai-chip">{fact}</span>)}</div> : null}
         </div>
       ) : details && image ? <p className="civitai-card-note">No prompt shared for this picture.</p> : null}
-
-      <a className="civitai-card-open" href={details?.page || row.page} target="_blank" rel="noreferrer noopener"><ExternalLink size={13} /> Open on Civitai</a>
     </section>
   );
 }
@@ -189,13 +193,18 @@ export function CivitaiLoras({ profile, options, current, remaining, onAdd, onLi
       setDetails((value) => ({ ...value, [row.versionId]: { loading: false, error: error instanceof Error ? error.message : 'Civitai couldn’t be reached.' } }));
     }
   };
+  // The card takes the list's place; closing it brings the list back where it was.
+  const listScroll = useRef(0);
   const open = (row: CivitaiLora) => {
-    if (openId === row.id) { setOpenId(''); return; }
+    listScroll.current = listRef.current?.scrollTop || 0;
     setOpenId(row.id);
     const known = details[row.versionId];
     if (!known || (!known.loading && 'error' in known)) void fetchDetails(row);
-    listRef.current?.scrollTo({ top: 0 });
   };
+  const close = () => setOpenId('');
+  useLayoutEffect(() => {
+    if (listRef.current) listRef.current.scrollTop = openId ? 0 : listScroll.current;
+  }, [openId]);
 
   const download = async (row: CivitaiLora) => {
     setFailed(({ [row.id]: _, ...rest }) => rest);
@@ -240,32 +249,28 @@ export function CivitaiLoras({ profile, options, current, remaining, onAdd, onLi
           onChange={(event) => setQuery(event.target.value)}
           onKeyDown={(event) => {
             if (event.key !== 'Escape') return;
-            if (openId) { event.preventDefault(); event.stopPropagation(); setOpenId(''); return; }
+            if (openId) { event.preventDefault(); event.stopPropagation(); close(); return; }
             if (query) { event.preventDefault(); event.stopPropagation(); setQuery(''); }
           }}
         />
         {query ? <button type="button" aria-label="Clear search" onClick={() => { setQuery(''); inputRef.current?.focus(); }}><X size={13} /></button> : null}
       </label>
       <div className="lora-picker-list civitai-list" ref={listRef} role="list" aria-busy={state.loading}>
-        {openRow ? <LoraCard row={openRow} state={details[openRow.versionId]} action={action(openRow)} onClose={() => setOpenId('')} onRetry={() => fetchDetails(openRow)} /> : null}
-        {state.unsupported ? (
+        {openRow ? <LoraCard row={openRow} state={details[openRow.versionId]} action={action(openRow)} onClose={close} onRetry={() => fetchDetails(openRow)} /> : null}
+        {openRow ? null : state.unsupported ? (
           <div className="lora-empty"><p>Civitai has no LoRA category for this model, so nothing here would be sure to fit.</p></div>
         ) : null}
-        {state.error ? (
+        {!openRow && state.error ? (
           <div className="lora-empty is-unavailable"><AlertTriangle size={16} /><p>{state.error}</p><button type="button" className="btn" onClick={() => load(query.trim())}><RotateCw size={13} /> Try again</button></div>
         ) : null}
-        {!state.unsupported && !state.error ? (
+        {!openRow && !state.unsupported && !state.error ? (
           <div className="lora-picker-section">
-            <div className="lora-picker-heading is-static">
-              <span>{query.trim() ? 'Results' : 'Most downloaded'}{state.bases.length ? ` · ${state.bases.slice(0, 3).join(', ')}${state.bases.length > 3 ? '…' : ''}` : ''}</span>
-              {state.site ? <em>{state.site}</em> : null}
-            </div>
             {rows.map((row) => {
               const error = errorOf(row);
               return (
                 <div
                   key={row.id}
-                  className={cn('lora-option civitai-row', row.id === openId && 'is-open')}
+                  className="lora-option civitai-row"
                   role="listitem"
                   tabIndex={0}
                   aria-label={`${row.name}, show details`}
@@ -275,7 +280,7 @@ export function CivitaiLoras({ profile, options, current, remaining, onAdd, onLi
                   <span className="civitai-thumb" aria-hidden="true"><SafeImg src={row.preview} alt="" loading="lazy" referrerPolicy="no-referrer" /></span>
                   <span className="lora-option-copy">
                     <strong title={row.name}>{row.name}</strong>
-                    <span>{[row.creator, row.baseModel, row.version].filter(Boolean).join(' · ')}</span>
+                    <span>{row.creator || row.version}</span>
                     {error ? <span className="civitai-error">{error}</span> : null}
                   </span>
                   {action(row)}

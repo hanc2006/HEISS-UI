@@ -549,11 +549,18 @@
 /* The picker's two sources: this computer, and Civitai (CivitaiLoras.tsx). */
 .lora-source .segmented { width: 100%; }
 .lora-source .segmented button { flex: 1; }
+/* Mature content on: searches go to civitai.red, and its tab says so. */
+.lora-source.is-mature .segmented button:last-child { color: #ff5a5a; }
+.lora-source.is-mature .segmented button:last-child.active { background: #4a1416; color: #ff4d4d; }
+
+/* In the sidebar the picker takes all the height there is; its list scrolls inside. */
+.sidebar-body > .lora-panel:has(> .lora-picker) { flex: 1 1 0; min-height: 320px; }
+.sidebar-body > .lora-panel > .lora-picker { flex: 1; min-height: 0; max-height: none; }
+
 /* Rows never push the list sideways: everything in them shrinks or ellipsizes. */
 .civitai-list { overflow-x: hidden; }
 .civitai-row { cursor: pointer; padding: 4px; min-width: 0; }
 .civitai-row:hover, .civitai-row:focus-visible { background: var(--control-fill); }
-.civitai-row.is-open { background: rgb(255 255 255 / .09); }
 .civitai-row:focus-visible { outline: 2px solid var(--ember); outline-offset: -2px; }
 .civitai-thumb {
   flex: none;
@@ -566,18 +573,35 @@
 .civitai-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .civitai-row .lora-option-copy span { white-space: nowrap; }
 .civitai-row .lora-option-copy .civitai-error { white-space: normal; color: var(--ember); }
-.civitai-action { flex: none; height: 30px; min-height: 30px; padding: 0 10px; gap: 6px; font-size: 12px; }
-.civitai-progress { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
+/* One width for every state of the button (size, Add, Retry, progress), so rows line up. */
+.civitai-action, .civitai-row > em, .civitai-card-head > em {
+  flex: none;
+  width: 78px;
+  height: 28px;
+  min-height: 28px;
+  padding: 0 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  font-size: 11px;
+  font-style: normal;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.civitai-action svg { width: 12px; height: 12px; flex: none; }
+.civitai-row > em, .civitai-card-head > em { color: hsl(var(--muted-foreground)); }
 .civitai-loading { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 0; font-size: 12.5px; color: hsl(var(--muted-foreground)); }
 .civitai-more { width: 100%; margin-top: 4px; }
-.lora-picker-heading.is-static em { font-style: normal; opacity: .6; text-transform: none; }
 
-/* A LoRA's card, above the list: pictures, usage tips, trigger words, prompt. */
+/* A LoRA's card, in place of the list: picture, usage tips, trigger words, configuration, prompt. */
 .lora-picker.has-card { max-height: min(86dvh, 820px); }
 .civitai-card {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 100%;
+  box-sizing: border-box;
   padding: 8px;
   border-radius: var(--r-item);
   background: rgb(255 255 255 / .04);
@@ -586,12 +610,13 @@
 }
 .civitai-card-media {
   position: relative;
-  height: 220px;
+  flex: 1 0 240px;
+  max-height: 480px;
   border-radius: calc(var(--r-item) - 2px);
   overflow: hidden;
   background: rgb(0 0 0 / .35);
 }
-.civitai-card-media img { width: 100%; height: 100%; object-fit: contain; display: block; }
+.civitai-card-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
 .civitai-card-step, .civitai-card-close {
   position: absolute;
   display: grid;
@@ -623,43 +648,40 @@
   font-variant-numeric: tabular-nums;
 }
 .civitai-card-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.civitai-card-title { flex: 1; min-width: 0; display: grid; gap: 1px; }
-.civitai-card-title strong { font-size: 14px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.civitai-card-title span { font-size: 11.5px; color: hsl(var(--muted-foreground)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.civitai-card-head > em { flex: none; font-size: 11px; font-style: normal; color: hsl(var(--muted-foreground)); }
-.civitai-card-facts { display: grid; gap: 6px; margin: 0; }
-.civitai-card-facts > div { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
-.civitai-card-facts dt { flex: none; width: 92px; font-size: 11.5px; color: hsl(var(--muted-foreground)); }
-.civitai-card-facts dd { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; gap: 5px; margin: 0; }
-.civitai-chip {
+.civitai-card-title { flex: 1; min-width: 0; font-size: 14px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Civitai's details table, without its lines: label left, value right. */
+.civitai-card-facts { display: grid; gap: 10px; margin: 0; }
+.civitai-card-facts > div { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-width: 0; }
+.civitai-card-facts dt { flex: none; font-size: 12.5px; color: hsl(var(--muted-foreground)); }
+.civitai-card-facts dd { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px; margin: 0; }
+.civitai-badge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
   max-width: 100%;
-  padding: 2px 8px;
+  padding: 3px 8px;
   border: 0;
   border-radius: 6px;
   background: rgb(255 255 255 / .07);
   color: hsl(var(--foreground) / .85);
-  font: 600 11px/1.6 var(--font-mono, ui-monospace, monospace);
+  font: 600 11px/1.5 var(--font-mono, ui-monospace, monospace);
   letter-spacing: .02em;
   overflow-wrap: anywhere;
 }
-.civitai-chip.is-trigger { cursor: pointer; background: color-mix(in srgb, var(--ember) 16%, transparent); color: hsl(var(--foreground)); }
-.civitai-chip.is-trigger:hover { background: color-mix(in srgb, var(--ember) 26%, transparent); }
-.civitai-chip span { overflow-wrap: anywhere; }
+.civitai-badge.is-strength { background: rgb(34 211 238 / .12); color: #67e8f9; text-transform: uppercase; }
+/* Trigger words keep their case: it matters to the LoRA. */
+.civitai-badge.is-trigger { cursor: pointer; background: rgb(168 85 247 / .16); color: #d8b4fe; }
+.civitai-badge.is-trigger:hover { background: rgb(168 85 247 / .26); }
+.civitai-badge span { overflow-wrap: anywhere; }
 .civitai-card-prompt { display: grid; gap: 4px; min-width: 0; }
-.civitai-card-prompt-head { display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; color: hsl(var(--muted-foreground)); }
+.civitai-card-prompt-head { display: flex; align-items: center; justify-content: space-between; font-size: 12.5px; color: hsl(var(--muted-foreground)); }
 .civitai-card-prompt p { margin: 0; font-size: 12.5px; line-height: 1.5; color: hsl(var(--foreground) / .85); overflow-wrap: anywhere; }
 .civitai-card-prompt p.is-clamped { display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .civitai-card-negative em { font-style: normal; color: hsl(var(--muted-foreground)); margin-right: 4px; }
-.civitai-card-meta { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 2px; }
 .civitai-card-icon { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: var(--r-pill); background: transparent; color: inherit; cursor: pointer; }
 .civitai-card-icon:hover { background: var(--control-hover); color: hsl(var(--foreground)); }
 .civitai-card-link { justify-self: start; padding: 0; border: 0; background: none; color: var(--ember); font-size: 12px; cursor: pointer; }
 .civitai-card-note { margin: 0; font-size: 12px; color: hsl(var(--muted-foreground)); }
-.civitai-card-open { display: inline-flex; align-items: center; gap: 6px; justify-self: start; font-size: 12px; color: hsl(var(--muted-foreground)); text-decoration: none; }
-.civitai-card-open:hover { color: hsl(var(--foreground)); }
 
 .lora-picker-foot { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 10px; box-shadow: inset 0 1px 0 var(--surface-border); }
 .lora-picker-foot > span { font-size: 11.5px; color: hsl(var(--muted-foreground)); }

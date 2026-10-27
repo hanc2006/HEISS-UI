@@ -6,6 +6,7 @@ import { defaultLoraStrength, loraGroups, maxLoras, recommendedLoras, rankedLora
 import { Segmented, Switch } from './SettingsControls';
 import { Tip } from './components';
 import { CivitaiLoras } from './CivitaiLoras';
+import { loadCivitaiStatus } from './civitai';
 import { copyText } from './api';
 import { loraFit, useLoraInfo, type LoraInfo } from './useLoraInfo';
 import type { LoraSnapshot } from './lora-storage';
@@ -199,6 +200,14 @@ function LoraPicker({ options, profile, fitOf, baseOf, current, favorites, recen
   const [source, setSource] = useState<PickerSource>(swapping ? 'local' : startOn);
   // A Civitai card open above the list: the picker grows to keep the list usable.
   const [cardOpen, setCardOpen] = useState(false);
+  // Mature content on (Settings › Models): the Civitai tab turns red, as searches go to civitai.red.
+  const [mature, setMature] = useState(false);
+  useEffect(() => {
+    if (swapping) return;
+    let live = true;
+    loadCivitaiStatus().then((status) => { if (live) setMature(status.mature); }).catch(() => {});
+    return () => { live = false; };
+  }, [swapping]);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [highlight, setHighlight] = useState(0);
@@ -247,7 +256,7 @@ function LoraPicker({ options, profile, fitOf, baseOf, current, favorites, recen
         <span>{swapping ? <>Replace <strong>{fileName(swapping)}</strong></> : remaining > 0 ? `Add up to ${remaining}` : 'Stack is full'}</span>
       </div>
       {!swapping ? (
-        <div className="lora-source">
+        <div className={cn('lora-source', mature && 'is-mature')} title={mature ? 'Mature content is on: Civitai results come from civitai.red' : undefined}>
           <Segmented<PickerSource>
             label="Where to find LoRAs"
             value={source}
