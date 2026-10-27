@@ -188,17 +188,18 @@ async function proxiedRequest(url, proxy, { method = "GET", headers, signal } = 
 const redirects = new Set([301, 302, 303, 307, 308]);
 
 /**
- * fetch for Hugging Face downloads: mirror, token and proxy applied, and
- * redirects followed by hand so the token never leaves huggingface.co.
- * `transport` replaces the network in tests.
+ * fetch with a credential that must stay on its own hosts: proxy applied, and
+ * redirects followed by hand so `tokenFor(url)` decides on every hop (the
+ * storage a download redirects to never sees it). `transport` replaces the
+ * network in tests.
  */
-export async function hfFetch(input, init = {}, { env = process.env, transport = null } = {}) {
-  let url = mirroredUrl(input, env);
-  const { token } = hfToken(env);
+export async function guardedFetch(input, init = {}, { env = process.env, transport = null, tokenFor = () => "", service = "The server" } = {}) {
+  let url = new URL(String(input));
   for (let hop = 0; hop <= 10; hop += 1) {
     const headers = new Headers(init.headers || {});
     headers.delete("authorization");
-    if (token && url.protocol === "https:" && url.hostname === "huggingface.co") headers.set("authorization", `Bearer ${token}`);
+    const token = url.protocol === "https:" ? tokenFor(url) : "";
+    if (token) headers.set("authorization", `Bearer ${token}`);
     const proxy = proxyFor(url, env);
     const options = { ...init, headers, redirect: "manual" };
     const response = transport ? await transport(url, options, proxy)
@@ -209,5 +210,14 @@ export async function hfFetch(input, init = {}, { env = process.env, transport =
     await response.body?.cancel().catch(() => {});
     url = new URL(location, url);
   }
-  throw new Error("Hugging Face kept redirecting the download.");
+  throw new Error(`${service} kept redirecting the download.`);
+}
+
+/** fetch for Hugging Face downloads: mirror, token and proxy applied; the token never leaves huggingface.co. */
+export async function hfFetch(input, init = {}, { env = process.env, transport = null } = {}) {
+  const { token } = hfToken(env);
+  return guardedFetch(mirroredUrl(input, env), init, {
+    env, transport, service: "Hugging Face",
+    tokenFor: (url) => (token && url.hostname === "huggingface.co" ? token : "")
+  });
 }

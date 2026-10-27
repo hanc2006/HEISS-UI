@@ -3,8 +3,9 @@ import { Reorder, useDragControls } from 'framer-motion';
 import { AlertTriangle, ArrowLeft, Check, ChevronDown, GripVertical, Layers, Plus, RotateCcw, Save, Search, Star, X } from 'lucide-react';
 import { cn } from './format';
 import { defaultLoraStrength, loraGroups, maxLoras, recommendedLoras, rankedLoras, type FitOf } from './loras';
-import { Switch } from './SettingsControls';
+import { Segmented, Switch } from './SettingsControls';
 import { Tip } from './components';
+import { CivitaiLoras } from './CivitaiLoras';
 import { copyText } from './api';
 import { loraFit, useLoraInfo, type LoraInfo } from './useLoraInfo';
 import type { LoraSnapshot } from './lora-storage';
@@ -173,8 +174,13 @@ function LoraCard({ item, index, count, missing, overLimit, info, otherModel, on
 type PickerRow = { key: string; name: string };
 type PickerSection = { id: string; label: string; rows: PickerRow[]; collapsible?: boolean };
 
-function LoraPicker({ options, profile, fitOf, baseOf, current, favorites, recents, remaining, swapping, onToggleFavorite, onAdd, onSwap, onClose }: {
+type PickerSource = 'local' | 'civitai';
+
+function LoraPicker({ options, profile, fitOf, baseOf, current, favorites, recents, remaining, swapping, startOn, onToggleFavorite, onAdd, onSwap, onClose, onLibraryChanged }: {
   options: string[];
+  /** Where the picker opens: Civitai when there is nothing on this computer yet. */
+  startOn: PickerSource;
+  onLibraryChanged: () => void;
   profile: Profile | null;
   fitOf: FitOf;
   /** What a LoRA was made for, as people call it. */
@@ -189,13 +195,15 @@ function LoraPicker({ options, profile, fitOf, baseOf, current, favorites, recen
   onSwap: (name: string) => void;
   onClose: () => void;
 }) {
+  // Replacing a LoRA picks from this computer; adding can also fetch one from Civitai.
+  const [source, setSource] = useState<PickerSource>(swapping ? 'local' : startOn);
   const [query, setQuery] = useState('');
   const [selected, setSelected] = useState<string[]>([]);
   const [highlight, setHighlight] = useState(0);
   const [collapsed, setCollapsed] = useState<Set<string>>(() => new Set());
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
-  useEffect(() => { inputRef.current?.focus(); }, []);
+  useEffect(() => { if (source === 'local') inputRef.current?.focus(); }, [source]);
 
   const available = useMemo(() => new Set(options), [options]);
   const sections = useMemo<PickerSection[]>(() => {
@@ -236,6 +244,19 @@ function LoraPicker({ options, profile, fitOf, baseOf, current, favorites, recen
         <button type="button" className="btn is-ghost lora-picker-back" onClick={onClose}><ArrowLeft size={14} /> Back</button>
         <span>{swapping ? <>Replace <strong>{fileName(swapping)}</strong></> : remaining > 0 ? `Add up to ${remaining}` : 'Stack is full'}</span>
       </div>
+      {!swapping ? (
+        <div className="lora-source">
+          <Segmented<PickerSource>
+            label="Where to find LoRAs"
+            value={source}
+            onChange={setSource}
+            options={[{ value: 'local', label: `This computer${options.length ? ` · ${options.length}` : ''}` }, { value: 'civitai', label: 'Civitai' }]}
+          />
+        </div>
+      ) : null}
+      {source === 'civitai' ? (
+        <CivitaiLoras profile={profile} options={options} current={current} remaining={remaining} onAdd={onAdd} onLibraryChanged={onLibraryChanged} />
+      ) : (<>
       <label className="lora-picker-search">
         <Search size={14} />
         <input
@@ -307,6 +328,12 @@ function LoraPicker({ options, profile, fitOf, baseOf, current, favorites, recen
           );
         })}
         {!visibleRows.length && query ? <div className="lora-empty"><p>No LoRAs match “{query}”.</p></div> : null}
+        {!options.length && !query ? (
+          <div className="lora-empty">
+            <p>No LoRAs on this computer yet.</p>
+            <button type="button" className="btn" onClick={() => setSource('civitai')}><Search size={13} /> Find on Civitai</button>
+          </div>
+        ) : null}
       </div>
       {multi ? (
         <div className="lora-picker-foot">
@@ -316,6 +343,7 @@ function LoraPicker({ options, profile, fitOf, baseOf, current, favorites, recen
           </button>
         </div>
       ) : null}
+      </>)}
     </div>
   );
 }
@@ -447,7 +475,9 @@ function Stacks({ library, loras, activeId, setActiveId, onLoad }: {
 
 type Undo = { label: string; restore: LoraSelection[] };
 
-export function LoraPanel({ loras, setLoras, options, profile, limit, library, rememberedStrength, unavailableReason }: {
+export function LoraPanel({ loras, setLoras, options, profile, limit, library, rememberedStrength, unavailableReason, onLibraryChanged = () => {} }: {
+  /** Ask ComfyUI for its LoRAs again, after one is downloaded from Civitai. */
+  onLibraryChanged?: () => void;
   loras: LoraSelection[];
   setLoras: (update: LoraSelection[] | ((current: LoraSelection[]) => LoraSelection[])) => void;
   options: string[];
@@ -457,7 +487,7 @@ export function LoraPanel({ loras, setLoras, options, profile, limit, library, r
   rememberedStrength: (name: string, fallback: number) => number;
   unavailableReason: string;
 }) {
-  const [picker, setPicker] = useState<{ swap: string | null } | null>(null);
+  const [picker, setPicker] = useState<{ swap: string | null; source?: PickerSource } | null>(null);
   const [activeStackId, setActiveStackId] = useState('');
   const [undo, setUndo] = useState<Undo | null>(null);
   const undoTimer = useRef<number | null>(null);
@@ -524,10 +554,12 @@ export function LoraPanel({ loras, setLoras, options, profile, limit, library, r
           recents={library.recents}
           remaining={Math.max(0, cap - loras.length)}
           swapping={picker.swap}
+          startOn={picker.source || (options.length ? 'local' : 'civitai')}
           onToggleFavorite={library.toggleFavorite}
           onAdd={add}
           onSwap={(name) => picker.swap && swap(picker.swap, name)}
           onClose={() => setPicker(null)}
+          onLibraryChanged={onLibraryChanged}
         />
       </div>
     );
@@ -572,7 +604,14 @@ export function LoraPanel({ loras, setLoras, options, profile, limit, library, r
         </Reorder.Group>
       ) : (
         <div className="lora-empty">
-          <p>LoRAs steer style, characters or detail on top of the model.{library.stacks.length ? ' Load a saved stack above, or add one.' : ' Add one to start.'}</p>
+          {options.length ? (
+            <p>LoRAs steer style, characters or detail on top of the model.{library.stacks.length ? ' Load a saved stack above, or add one.' : ' Add one to start.'}</p>
+          ) : (
+            <>
+              <p>LoRAs steer style, characters or detail on top of the model. There are none on this computer yet.</p>
+              <button type="button" className="btn" onClick={() => setPicker({ swap: null, source: 'civitai' })}><Search size={13} /> Find on Civitai</button>
+            </>
+          )}
         </div>
       )}
 

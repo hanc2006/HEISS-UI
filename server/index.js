@@ -45,6 +45,7 @@ import { jobs, queueClearsAt, runJob, runMockJob, setTerminalJob } from './jobs.
 import { cancelPrompt, cancelPrompts } from './comfy-queue.js';
 import { loraInfos } from './lora-info.js';
 import { hfEndpoint, hfTokenStatus, saveHfToken } from './hf-access.js';
+import { civitaiDownload, civitaiStatus, saveCivitaiMature, saveCivitaiToken, searchLoras } from './civitai-api.js';
 import { deleteImportedWorkflow, getCustomWorkflow, saveImportedWorkflow, userWorkflowsDir, validateGraph } from './custom-workflows.js';
 import { applyBundles, createBundles, DEFAULT_COOLDOWN_MINUTES, dissolveBundle, listBundles, pendingSummary, setBundleCover } from './gallery-bundles.js';
 import { galleryStats } from './stats.js';
@@ -885,14 +886,33 @@ app.get("/api/models/downloads", (_req, res) => {
 
 // Fetches a missing text encoder or VAE. Only ids from HEISS's own catalog are
 // accepted, so the server never downloads from a URL a request supplies.
+/**
+ * What a download id stands for, worked out on the server, never taken from the request:
+ * "list:<file>" (a file an imported workflow names, from ComfyUI-Manager's model list),
+ * "civitai:<version>:<file>" (read again from Civitai, civitai-api.js), else HEISS's catalog.
+ * Answers false and the error when Civitai couldn't be asked.
+ */
+async function downloadSpec(id, res) {
+  try {
+    const spec = id.startsWith("list:") ? await listDownload(id) : id.startsWith("civitai:") ? await civitaiDownload(id) : catalogDownload(id);
+    if (spec) return spec;
+    res.status(400).json({ ok: false, error: "Unknown file." });
+  } catch (error) {
+    res.status(502).json({ ok: false, error: error.message });
+  }
+  return null;
+}
+
+/** A download HEISS already knows (running, waiting, done or paused on disk), for discarding without asking anyone. */
+function knownDownload(id) {
+  const state = downloadState();
+  return [state.active, ...state.queued, ...state.recent, ...state.paused].find((entry) => entry?.id === id && entry.file && entry.folder) || null;
+}
+
 app.post("/api/models/downloads", async (req, res) => {
   if (!requireAdmin(req, res)) return;
-  // "list:<file>": a file an imported workflow names, from ComfyUI-Manager's model list, resolved here again.
-  const spec = String(req.body?.id || "").startsWith("list:") ? await listDownload(req.body.id) : catalogDownload(req.body?.id);
-  if (!spec) {
-    res.status(400).json({ ok: false, error: "Unknown file." });
-    return;
-  }
+  const spec = await downloadSpec(String(req.body?.id || ""), res);
+  if (!spec) return;
   try {
     const download = startDownload(spec);
     // Already on disk: rescan now so the model page catches up without another click.
@@ -942,7 +962,7 @@ app.put("/api/models/recommendations/:key", (req, res) => {
 app.post("/api/models/downloads/cancel", (req, res) => {
   if (!requireAdmin(req, res)) return;
   const id = String(req.body?.id || "");
-  const spec = req.body?.discard ? catalogDownload(id) : null;
+  const spec = req.body?.discard ? (id.startsWith("civitai:") ? knownDownload(id) : catalogDownload(id)) : null;
   if (spec) discardDownload(spec);
   else cancelDownload(id);
   res.json({ ok: true, ...downloadState() });
@@ -962,15 +982,38 @@ app.post("/api/settings/hf-token", (req, res) => {
   }
 });
 
+// Civitai: the API key (like the Hugging Face token: in .env, never shown back) and the mature switch,
+// which also picks the site (civitai.red with it on, civitai.com without).
+app.get("/api/settings/civitai", (_req, res) => {
+  res.json({ ok: true, ...civitaiStatus() });
+});
+
+app.post("/api/settings/civitai", (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const body = req.body || {};
+    if (typeof body.mature === "boolean") saveCivitaiMature(body.mature);
+    res.json({ ok: true, ...("token" in body ? saveCivitaiToken(body.token) : civitaiStatus()) });
+  } catch (error) {
+    res.status(400).json({ ok: false, error: error.message });
+  }
+});
+
+// LoRAs on Civitai for the model in use. Anyone signed in may look; downloading is the admin's (the route above).
+app.get("/api/civitai/loras", async (req, res) => {
+  try {
+    const { query = "", family = "", model = "", cursor = "" } = req.query || {};
+    res.json({ ok: true, ...(await searchLoras({ query: String(query), family: String(family), model: String(model), cursor: String(cursor) })) });
+  } catch (error) {
+    res.status(error.status === 401 || error.status === 403 ? 403 : 502).json({ ok: false, error: error.message });
+  }
+});
+
 // "Download again" for a catalog file a run found damaged: the broken copy goes first.
 app.post("/api/models/downloads/replace", async (req, res) => {
   if (!requireAdmin(req, res)) return;
-  // "list:<file>": a file an imported workflow names, from ComfyUI-Manager's model list, resolved here again.
-  const spec = String(req.body?.id || "").startsWith("list:") ? await listDownload(req.body.id) : catalogDownload(req.body?.id);
-  if (!spec) {
-    res.status(400).json({ ok: false, error: "Unknown file." });
-    return;
-  }
+  const spec = await downloadSpec(String(req.body?.id || ""), res);
+  if (!spec) return;
   try {
     res.json({ ok: true, download: replaceDownload(spec), ...downloadState() });
   } catch (error) {

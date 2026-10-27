@@ -26,6 +26,7 @@ import { CivitaiRow, EarlierImagesGroup, PromptHistoryRow } from './LibrarySetti
 import { knownDiagnostics, loadDiagnostics, troubleshootingUrl } from './diagnostics';
 import { boardUrl, openFeedback } from './feedback';
 import { HuggingFaceTokenSettings } from './HuggingFaceToken';
+import { CivitaiSettings } from './CivitaiSettings';
 import { OtherDevicesGroup } from './OtherDevices';
 import { TrashRow } from './TrashRow';
 import { loadRtxStatus, rtxStageLine, useRtxStatus } from './rtx';
@@ -1278,6 +1279,7 @@ export function SettingsDialog({ view, open, section, onSectionChange, onClose, 
             </Group>
             {modelFolders ? <ModelFolderSettings folders={modelFolders} confirmAction={confirmAction} onOpen={() => { onClose(); modelFolders.openDialog(); }} hints={prefs.modelFolderHints !== false} onHintsChange={(next) => setPrefs({ modelFolderHints: next })} /> : null}
             <HuggingFaceTokenSettings showToast={showToast} />
+            <CivitaiSettings showToast={showToast} />
           </>
         ) : null}
 

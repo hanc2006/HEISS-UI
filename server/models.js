@@ -141,7 +141,9 @@ export function inferModels(info, stats = {}) {
   const schedulers = optionsFor(info, "KSampler", "scheduler");
   const weightDtypes = optionsFor(info, "UNETLoader", "weight_dtype");
   const loras = optionsFor(info, "LoraLoader", "lora_name");
-  const canUseLoras = Boolean(info.LoraLoader && loras.length);
+  // Whether the model can take LoRAs, not whether any are installed yet: an empty
+  // folder still gets the LoRAs tab, where they can be found and downloaded.
+  const canUseLoras = Boolean(info.LoraLoader);
   const incompatibleModels = unets.filter((name) => isNvfp4Model(name) && !torchSupportsNvfp4(stats));
   const textMeta = textRange(info, "CLIPTextEncode", "text");
   const samplerRange = {

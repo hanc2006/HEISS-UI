@@ -546,6 +546,29 @@
 .lora-option-star:hover { background: var(--control-hover); color: #fff; }
 .lora-option-star.active { color: var(--ember); }
 
+/* The picker's two sources: this computer, and Civitai (CivitaiLoras.tsx). */
+.lora-source .segmented { width: 100%; }
+.lora-source .segmented button { flex: 1; }
+.civitai-row { cursor: default; padding-left: 4px; }
+.civitai-row:hover { background: var(--control-fill); }
+.civitai-thumb {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border-radius: calc(var(--r-item) - 2px);
+  background: rgb(255 255 255 / .05);
+}
+.civitai-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.civitai-row .lora-option-copy span { white-space: nowrap; }
+.civitai-row .lora-option-copy .civitai-error { white-space: normal; color: var(--ember); }
+.civitai-action { flex: none; height: 30px; min-height: 30px; padding: 0 10px; gap: 6px; font-size: 12px; }
+.civitai-progress { display: inline-flex; align-items: center; gap: 5px; font-variant-numeric: tabular-nums; }
+.civitai-row:hover .civitai-page, .civitai-page:focus-visible { opacity: 1; }
+.civitai-loading { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 0; font-size: 12.5px; color: hsl(var(--muted-foreground)); }
+.civitai-more { width: 100%; margin-top: 4px; }
+.lora-picker-heading.is-static em { font-style: normal; opacity: .6; text-transform: none; }
+
 .lora-picker-foot { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 10px; box-shadow: inset 0 1px 0 var(--surface-border); }
 .lora-picker-foot > span { font-size: 11.5px; color: hsl(var(--muted-foreground)); }
 

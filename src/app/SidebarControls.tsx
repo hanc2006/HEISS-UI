@@ -58,13 +58,12 @@ function loraSetup(view: any) {
     .map((option: unknown) => typeof option === "string" ? option : String((option as { name?: string })?.name || ""))
     .filter(Boolean);
   const loraLimit = Math.min(maxLoras, currentProfile?.maxLoras || maxLoras);
+  // An empty LoRA folder isn't a reason: the panel offers to find some on Civitai.
   const loraUnavailable = currentProfile && !currentProfile.capabilities.lora && mode !== "image"
     ? "This video workflow has no LoRA loader. Built-in video models take LoRAs."
     : currentProfile && !currentProfile.capabilities.lora
       ? "This workflow has no LoRA loader, so it can’t use LoRAs."
-      : !loraOptions.length
-        ? "No LoRAs found. Put .safetensors files in ComfyUI’s models/loras folder, then rescan in Settings › Models."
-        : "";
+      : "";
   return { loraOptions, loraLimit, loraUnavailable };
 }
 
@@ -112,6 +111,7 @@ export function PhoneAdvancedControls({ view }: { view: any }) {
               library={loraLibrary}
               rememberedStrength={rememberedLoraStrength}
               unavailableReason={loraUnavailable}
+              onLibraryChanged={() => refreshModels(false)}
             />
           </div>
         </>
@@ -374,6 +374,7 @@ export function SidebarControls({ view }: { view: any }) {
             library={loraLibrary}
             rememberedStrength={rememberedLoraStrength}
             unavailableReason={loraUnavailable}
+            onLibraryChanged={() => refreshModels(false)}
           />
         ) : null}
       </div>

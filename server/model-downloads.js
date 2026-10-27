@@ -6,8 +6,11 @@ import { pipeline } from "node:stream/promises";
 import { comfyModelsDir, modelFolders } from './comfy.js';
 import { renameWithRetry } from "./json-store.js";
 import { freeBytesAt } from "./paths.js";
-// Every catalog request goes through Hugging Face access: token, mirror and proxy (hf-access.js).
-import { hfFetch as fetch } from "./hf-access.js";
+// Every request goes through its site's access module: token, mirror and proxy, the token kept on its own hosts.
+import { hfFetch } from "./hf-access.js";
+import { civitaiFetch, civitaiHosts, isCivitaiHost, isCivitaiUrl } from "./civitai-api.js";
+
+const fetch = (url, init) => (isCivitaiUrl(url) ? civitaiFetch(url, init) : hfFetch(url, init));
 
 /**
  * Fetches text encoders and VAEs a model needs into ComfyUI's own folders. Only
@@ -26,7 +29,8 @@ import { hfFetch as fetch } from "./hf-access.js";
 
 // Imported workflows also name upscalers, ControlNets and adapters (workflow-models.js); still only .safetensors/.gguf.
 const allowedFolders = new Set(["text_encoders", "vae", "diffusion_models", "checkpoints", "loras", "clip_vision", "upscale_models", "controlnet", "ipadapter", "model_patches", "latent_upscale_models", "style_models"]);
-const allowedHosts = new Set(["huggingface.co"]);
+// Civitai files come only through civitai-api.js, which reads their address and SHA-256 from Civitai itself.
+const allowedHosts = new Set(["huggingface.co", ...civitaiHosts]);
 
 let queue = [];
 let active = null;
@@ -105,7 +109,7 @@ function targetFor(spec) {
   const name = path.basename(String(spec.file || ""));
   if (!name || name !== spec.file || !downloadableName(name, spec)) throw new Error("That isn’t a downloadable model file.");
   const url = new URL(spec.url);
-  if (url.protocol !== "https:" || !allowedHosts.has(url.hostname)) throw new Error("Only Hugging Face downloads are supported.");
+  if (url.protocol !== "https:" || !(allowedHosts.has(url.hostname) || isCivitaiHost(url.hostname))) throw new Error("Only Hugging Face and Civitai downloads are supported.");
   // Land it where ComfyUI itself reads that kind from, so it shows up without a restart.
   const dirs = folderDirs(spec.folder);
   const dir = dirs.find((item) => path.basename(item) === spec.folder) || dirs[0] || path.join(modelsDir, spec.folder);
@@ -364,6 +368,9 @@ async function fetchInto(entry, signal) {
   }
   if (!response.ok || !response.body) {
     await response.body?.cancel().catch(() => {});
+    if ((response.status === 401 || response.status === 403) && isCivitaiUrl(entry.url)) {
+      throw finalError(`${entry.file} needs a Civitai API key (HTTP ${response.status}). Add one in Settings › Models, then try again.`);
+    }
     if (response.status === 401 || response.status === 403) {
       throw finalError(`${entry.file} needs a Hugging Face sign-in or an accepted license (HTTP ${response.status}). Download it in your browser and put it in ComfyUI’s ${entry.folder} folder.`, { browser: true });
     }
@@ -372,7 +379,7 @@ async function fetchInto(entry, signal) {
       const page = repositoryPage(entry.url);
       throw finalError(`${entry.file} is no longer at its download address (HTTP 404). Update HEISS UI in Settings › About, or download it yourself${page ? ` from ${page}` : ""} and put it in ComfyUI’s ${entry.folder} folder.`);
     }
-    throw new Error(`Hugging Face answered ${response.status} for ${entry.file}.`);
+    throw new Error(`${isCivitaiUrl(entry.url) ? "Civitai" : "Hugging Face"} answered ${response.status} for ${entry.file}.`);
   }
   // Catalog sizes are approximate; only the server's own length is a check.
   const length = Number(response.headers.get("content-length") || 0);
