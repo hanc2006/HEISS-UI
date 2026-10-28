@@ -27,8 +27,10 @@ const STEPS = [
   { label: 'Ready', stages: [] as string[] }
 ];
 
-function stageOf(status: EnhanceStatus | null, offline: boolean, downloading: boolean): Stage {
+function stageOf(status: EnhanceStatus | null, offline: boolean, downloading: boolean, choose: boolean): Stage {
   if (!status) return offline ? 'offline' : 'checking';
+  // Opened from "Other models": the choice of model, even with one already working.
+  if (status.ready && choose) return downloading ? 'downloading' : 'model';
   if (status.ready) return 'ready';
   if (!status.nodes.ready) return status.nodes.state === 'restart' ? 'restart' : 'nodes';
   return downloading ? 'downloading' : 'model';
@@ -75,7 +77,7 @@ function EnhanceHero({ stage }: { stage: Stage }) {
   );
 }
 
-function copyFor(stage: Stage, nodeState: string) {
+function copyFor(stage: Stage | 'switch', nodeState: string) {
   switch (stage) {
     case 'checking': return { title: 'Prompt enhance', description: 'Checking ComfyUI…' };
     case 'offline': return { title: 'Waiting for ComfyUI', description: 'Start ComfyUI, and this carries on by itself.' };
@@ -85,21 +87,22 @@ function copyFor(stage: Stage, nodeState: string) {
     };
     case 'restart': return { title: 'Restart ComfyUI to continue', description: 'The new HEISS UI Nodes are in place. ComfyUI loads them when it restarts.' };
     case 'model': return { title: 'Choose the model that writes', description: 'A vision model that reads your words and pictures. It runs inside ComfyUI and makes room for your image models by itself.' };
+    case 'switch': return { title: 'Choose the model that writes', description: 'Prompt enhance is working. Switch to another model: one on this computer right away, or download one.' };
     case 'downloading': return { title: 'Downloading the model', description: 'A one-time download. It carries on if you close this.' };
     case 'ready': return { title: 'Prompt enhance is ready', description: 'Press the flame in the prompt bar, or Ctrl+E while you type. Undo is one click away.' };
   }
 }
 
-function ModelChoice({ choice, picked, recommended, onPick, disabled }: { choice: EnhanceChoice; picked: boolean; recommended: boolean; onPick: () => void; disabled: boolean }) {
+function ModelChoice({ choice, picked, recommended, inUse, onPick, disabled }: { choice: EnhanceChoice; picked: boolean; recommended: boolean; inUse: boolean; onPick: () => void; disabled: boolean }) {
   return (
     <li className={cn('enhance-choice', picked && 'is-picked')}>
       <button type="button" role="radio" aria-checked={picked} onClick={onPick} disabled={disabled}>
         <i aria-hidden="true">{picked ? <Check size={10} strokeWidth={3} /> : null}</i>
         <div>
-          <strong>{choice.label}{recommended ? <em>Recommended</em> : null}</strong>
+          <strong>{choice.label}{inUse ? <em>In use</em> : recommended ? <em>Recommended</em> : null}</strong>
           <span>{choice.note}</span>
         </div>
-        <small>{choice.onDisk ? 'Downloaded' : formatBytes(choice.bytes)}</small>
+        <small>{choice.onDisk || choice.listed ? 'Downloaded' : formatBytes(choice.bytes)}</small>
       </button>
     </li>
   );
@@ -115,11 +118,15 @@ export function EnhanceSetupDialog({ showToast }: { showToast: ShowToast }) {
     onError: (item) => { if (item.id.startsWith('enhancer:')) showToast(item.error || 'The model download stopped.', 'error'); }
   });
   const [pick, setPick] = useState('');
+  const choose = Boolean(setup?.choose);
   const choices = status?.choices || [];
-  const chosen = choices.find((choice) => choice.id === pick) || choices[0];
+  const inUse = status?.ready ? status.model : '';
+  // Switching starts on the next model rather than the one already in use.
+  const chosen = choices.find((choice) => choice.id === pick) || (choose ? choices.find((choice) => choice.file !== inUse) : null) || choices[0];
   const active = choices.map((choice) => downloadFor(downloads.state, choice.file)).find((item) => item && (item.status === 'downloading' || item.status === 'queued'));
-  const stage = stageOf(status, offline, Boolean(active));
-  const { title, description } = copyFor(stage, status?.nodes.state || '');
+  const stage = stageOf(status, offline, Boolean(active), choose);
+  const { title, description } = copyFor(choose && stage === 'model' && status?.ready ? 'switch' : stage, status?.nodes.state || '');
+  useEffect(() => { if (!open) setPick(''); }, [open]);
 
   // While open and not ready: look again every few seconds (an install, a restart, a download landing).
   useEffect(() => {
@@ -131,6 +138,18 @@ export function EnhanceSetupDialog({ showToast }: { showToast: ShowToast }) {
     }, stage === 'downloading' ? 5000 : 3000);
     return () => window.clearInterval(timer);
   }, [open, stage]);
+
+  // A model already on this computer: just use it from now on.
+  const useChosen = async () => {
+    if (!chosen) return;
+    try {
+      await saveEnhanceSettings({ model: chosen.file });
+      await loadEnhanceStatus({ fresh: true });
+      showToast(`Prompt enhance now writes with ${chosen.label}`, 'success');
+    } catch (error) {
+      showToast((error as Error).message || 'Couldn’t switch the model.', 'error');
+    }
+  };
 
   const download = async () => {
     if (!chosen) return;
@@ -180,16 +199,20 @@ export function EnhanceSetupDialog({ showToast }: { showToast: ShowToast }) {
     body = (
       <ul className="enhance-choices" role="radiogroup" aria-label="Model">
         {choices.map((choice, index) => (
-          <ModelChoice key={choice.id} choice={choice} picked={choice.id === chosen?.id} recommended={index === 0} onPick={() => setPick(choice.id)} disabled={!admin} />
+          <ModelChoice key={choice.id} choice={choice} picked={choice.id === chosen?.id} recommended={index === 0} inUse={choice.file === inUse} onPick={() => setPick(choice.id)} disabled={!admin} />
         ))}
       </ul>
     );
     footer = (
       <>
-        <button className="btn is-ghost" onClick={() => closeEnhanceSetup()}>Not now</button>
-        {admin
-          ? <button className="btn is-primary" onClick={download} disabled={!chosen}>{chosen?.onDisk ? 'Use it' : `Download ${formatBytes(chosen?.bytes)}`}</button>
-          : <span className="upscale-fine">Download it on the computer running HEISS UI.</span>}
+        <button className="btn is-ghost" onClick={() => closeEnhanceSetup()}>{inUse ? 'Done' : 'Not now'}</button>
+        {!admin
+          ? <span className="upscale-fine">Download it on the computer running HEISS UI.</span>
+          : chosen && chosen.file === inUse
+            ? <button className="btn is-primary" disabled>In use</button>
+            : chosen && (chosen.onDisk || chosen.listed)
+              ? <button className="btn is-primary" onClick={inUse ? useChosen : download}>Use it</button>
+              : <button className="btn is-primary" onClick={download} disabled={!chosen}>{`Download ${formatBytes(chosen?.bytes)}`}</button>}
       </>
     );
   } else if (stage === 'downloading' && active) {

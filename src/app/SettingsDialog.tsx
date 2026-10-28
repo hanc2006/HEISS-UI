@@ -160,7 +160,7 @@ function EnhanceSettingsDrawer({ prefs, setPrefs }: { prefs: Preferences; setPre
       {on ? <EnhancePreview level={level.value} /> : null}
       {on && status && !status.ready ? (
         <Row label="Setup" description={status.nodes.ready ? 'Choose and download the model that writes.' : 'It runs on HEISS UI Nodes 8 and a local model.'}>
-          <button type="button" className="btn" onClick={openEnhanceSetup}><Wand2 size={13} /> Set up</button>
+          <button type="button" className="btn" onClick={() => openEnhanceSetup()}><Wand2 size={13} /> Set up</button>
         </Row>
       ) : null}
       {on && status?.ready ? (
@@ -172,7 +172,7 @@ function EnhanceSettingsDrawer({ prefs, setPrefs }: { prefs: Preferences; setPre
           </Row>
           {admin && listed.length < (status.choices || []).length ? (
             <Row label="Other models" description="Another writer to switch to: faster, or richer.">
-              <button type="button" className="btn" onClick={openEnhanceSetup}>Get one</button>
+              <button type="button" className="btn" onClick={() => openEnhanceSetup({ choose: true })}>Get one</button>
             </Row>
           ) : null}
           <Row label="Style" description={level.value === 'faithful' ? 'Sticks closely to your words; adds only what fills the picture in.' : level.value === 'bold' ? 'Takes more creative liberties with light, framing and detail.' : 'Rich detail that stays true to what you asked for.'}>

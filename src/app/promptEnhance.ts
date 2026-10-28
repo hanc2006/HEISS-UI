@@ -22,7 +22,8 @@ export type EnhanceStatus = {
   settings: EnhanceSettings;
 };
 
-type Store = { status: EnhanceStatus | null; offline: boolean; setup: { then?: () => void } | null };
+/** `choose`: opened to pick another model, so it shows the models even when everything is ready. */
+type Store = { status: EnhanceStatus | null; offline: boolean; setup: { then?: () => void; choose?: boolean } | null };
 let store: Store = { status: null, offline: false, setup: null };
 const listeners = new Set<() => void>();
 
@@ -57,8 +58,8 @@ export async function requireEnhance(then?: () => void) {
   return false;
 }
 
-export function openEnhanceSetup() {
-  set({ setup: {} });
+export function openEnhanceSetup({ choose = false }: { choose?: boolean } = {}) {
+  set({ setup: { choose } });
   loadEnhanceStatus({ fresh: true });
 }
 
