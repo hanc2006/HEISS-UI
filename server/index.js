@@ -44,7 +44,7 @@ import { emptyTrash, restoreTrash, scheduleTrashPurge, trashGalleryItems, trashS
 import { jobs, queueClearsAt, runJob, runMockJob, setTerminalJob } from './jobs.js';
 import { cancelPrompt, cancelPrompts } from './comfy-queue.js';
 import { loraInfos } from './lora-info.js';
-import { loraFileFacts, loraPreview, saveLoraPreview } from './lora-previews.js';
+import { loraFileFacts, loraOnCivitai, loraPreview, saveLoraPreview } from './lora-previews.js';
 import { hfEndpoint, hfTokenStatus, saveHfToken } from './hf-access.js';
 import { civitaiDownload, civitaiStatus, loraDetails, saveCivitaiMature, saveCivitaiToken, searchLoras } from './civitai-api.js';
 import { deleteImportedWorkflow, getCustomWorkflow, saveImportedWorkflow, userWorkflowsDir, validateGraph } from './custom-workflows.js';
@@ -917,8 +917,8 @@ app.post("/api/models/downloads", async (req, res) => {
   if (!spec) return;
   try {
     const download = startDownload(spec);
-    // A Civitai LoRA brings its first picture along, for the LoRA browser's card. Best effort.
-    if (spec.preview) saveLoraPreview(spec).catch(() => {});
+    // A Civitai LoRA brings its first picture and which Civitai LoRA it is along, for the LoRA browser. Best effort.
+    if (spec.civitai || spec.preview) saveLoraPreview(spec).catch(() => {});
     // Already on disk: rescan now so the model page catches up without another click.
     if (download?.already) await loadComfyContext({ force: true }).catch(() => null);
     res.json({ ok: true, download, ...downloadState() });
@@ -1554,6 +1554,16 @@ app.get("/api/loras/info", async (_req, res) => {
     res.json({ ok: true, loras: infos });
   } catch (error) {
     res.status(503).json({ ok: false, loras: {}, error: comfyDownMessage(error?.message) });
+  }
+});
+
+// Which Civitai LoRA a file on this computer is (lora-previews.js), for its details in the LoRA browser.
+app.get("/api/loras/civitai", async (req, res) => {
+  try {
+    const ref = await loraOnCivitai(String(req.query.name || ""));
+    res.json({ ok: true, found: Boolean(ref), ...(ref ? { ref } : {}) });
+  } catch (error) {
+    res.status(502).json({ ok: false, error: error.message });
   }
 });
 

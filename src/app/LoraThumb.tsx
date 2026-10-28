@@ -20,14 +20,14 @@ export function loraPreviewUrl(name: string, info?: LoraInfo) {
  * base model on that model's tint) is always there, and the picture fades in
  * once it has loaded, so a slow or broken one never leaves an empty box.
  */
-export function LoraThumb({ src, label, small = false }: { src?: string; label: string; small?: boolean }) {
+export function LoraThumb({ src, label, small = false, plain = false }: { src?: string; label: string; small?: boolean; /** The tile without the model's name on it (a card says it below). */ plain?: boolean }) {
   const [state, setState] = useState<'loading' | 'loaded' | 'failed'>('loading');
   React.useEffect(() => { setState('loading'); }, [src]);
   return (
     <>
       {state !== 'loaded' ? (
         <span className="wf-thumb-empty is-named" aria-hidden="true" style={{ '--wf-hue': hueOf(label || 'LoRA') } as React.CSSProperties}>
-          {label && !small ? <span>{label}</span> : <Layers size={small ? 14 : 20} strokeWidth={1.75} />}
+          {label && !small && !plain ? <span>{label}</span> : <Layers size={small ? 14 : 20} strokeWidth={1.75} />}
         </span>
       ) : null}
       {src && state !== 'failed' ? (

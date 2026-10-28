@@ -41,6 +41,8 @@ export type CivitaiLoraDetails = {
   /** The maker's recommended strength, when Civitai sends one. */
   strength: { value: number; min: number | null; max: number | null } | null;
   images: Array<{ url: string; width: number | null; height: number | null; made: CivitaiMade | null }>;
+  /** The primary file's size. */
+  bytes?: number;
   page: string;
 };
 
@@ -69,4 +71,11 @@ export function loadCivitaiStatus() {
 
 export function saveCivitaiSettings(body: { token?: string; mature?: boolean }) {
   return apiJson<CivitaiStatus>('/api/settings/civitai', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+}
+
+/** Which Civitai LoRA a file on this computer is, when Civitai knows it (server/lora-previews.js). */
+export type CivitaiRef = { versionId: number; modelId: number; name: string; version: string; baseModel: string };
+
+export function findLoraOnCivitai(name: string, signal?: AbortSignal) {
+  return apiJson<{ found: boolean; ref?: CivitaiRef }>(`/api/loras/civitai?name=${encodeURIComponent(name)}`, { signal });
 }

@@ -12,6 +12,10 @@ export type LoraInfo = {
   bytes?: number;
   /** Its picture's version (0 or missing: no picture), for /api/loras/preview. */
   preview?: number;
+  /** Its name on Civitai, its version id there and the base model Civitai names, when known. */
+  title?: string;
+  civitai?: number;
+  civitaiBase?: string;
 };
 export type LoraFit = 'fits' | 'other' | 'unknown';
 

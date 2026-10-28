@@ -149,7 +149,8 @@ test("a download is read again from Civitai: its own address (on the active site
   assert.equal(calls[0].url.href, "https://civitai.red/api/v1/model-versions/22");
   assert.deepEqual(spec, {
     id: "civitai:22:221", file: "ink.safetensors", folder: "loras", label: "Ink",
-    url: "https://civitai.red/api/download/models/221", bytes: 1024, sha256: sha("ink.safetensors"), source: "Civitai"
+    url: "https://civitai.red/api/download/models/221", bytes: 1024, sha256: sha("ink.safetensors"), source: "Civitai",
+    civitai: { versionId: 22, modelId: 0, name: "Ink", version: "", baseModel: "" }
   });
   assert.equal(await civitai.civitaiDownload("civitai:22:222", { transport, env: {} }), null, "a .pt is never taken");
   assert.equal(await civitai.civitaiDownload("civitai:22:999", { transport, env: {} }), null, "a file the version doesn't have");
@@ -252,4 +253,14 @@ test("a Civitai file goes through the shared queue: checked by its SHA-256 and p
     globalThis.fetch = realFetch;
   }
   assert.throws(() => startDownload({ id: "x", file: "a.safetensors", folder: "loras", url: "https://civitai.evil.net/a", sha256: sha("a") }), /Only Hugging Face and Civitai downloads/);
+});
+
+test("a file is found on Civitai by its SHA-256; one Civitai doesn't know is null", async () => {
+  const known = "a".repeat(64);
+  const transport = async (url) => url.pathname.endsWith(known)
+    ? new Response(JSON.stringify({ id: 7, modelId: 3, name: "v2", baseModel: "SDXL 1.0", model: { name: "Ink" } }), { status: 200 })
+    : new Response("{}", { status: 404 });
+  assert.deepEqual(await civitai.versionByHash(known.toUpperCase(), { transport, env: {} }), { versionId: 7, modelId: 3, name: "Ink", version: "v2", baseModel: "SDXL 1.0" });
+  assert.equal(await civitai.versionByHash("b".repeat(64), { transport, env: {} }), null);
+  assert.equal(await civitai.versionByHash("not-a-hash", { transport, env: {} }), null);
 });

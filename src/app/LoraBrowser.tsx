@@ -3,12 +3,10 @@ import { AlertTriangle, ArrowLeft, Check, Download, Heart, Layers, Loader2, Plus
 import { Modal } from './Modal';
 import { Segmented } from './SettingsControls';
 import { cn } from './format';
-import { copyText } from './api';
-import { useCopyFeedback } from './CopyFeedback';
 import { useThisComputer } from './device';
 import { rankedLoras, type FitOf } from './loras';
-import { loadCivitaiStatus, type CivitaiLora } from './civitai';
-import { CivitaiDetail, FactRow, countLabel, sizeLabel, useCivitaiLoras } from './CivitaiLoras';
+import { findLoraOnCivitai, loadCivitaiStatus, type CivitaiLora, type CivitaiRef } from './civitai';
+import { LoraDetail, civitaiByline, sizeLabel, useCivitaiLoras } from './CivitaiLoras';
 import { LoraThumb, loraPreviewUrl } from './LoraThumb';
 import { downloadFor, useModelDownloads } from './useModelDownloads';
 import { scrollSideways, useWheelRef } from './wheel';
@@ -74,7 +72,6 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
   const canDownload = useThisComputer();
   const family = profile?.familyName || familyLabel || profile?.family || '';
   const full = current.length >= cap;
-  const { copied, copyWith } = useCopyFeedback();
 
   useEffect(() => {
     let live = true;
@@ -108,7 +105,20 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
   }, [options]);
   const downloads = useModelDownloads({ onDone: (item) => { if (item.id.startsWith('civitai:')) onLibraryChanged(); } });
   const civitaiRow = civitai.rows.find((row) => row.id === civitaiSelected) || civitai.rows[0] || null;
-  useEffect(() => { if (source === 'civitai' && civitaiRow) civitai.ensureDetails(civitaiRow); }, [source, civitaiRow?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (source === 'civitai' && civitaiRow) civitai.ensureDetails(civitaiRow.versionId); }, [source, civitaiRow?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // A LoRA on this computer: which Civitai LoRA it is (its sidecar, or its SHA-256 asked of Civitai), then Civitai's details.
+  const [refs, setRefs] = useState<Record<string, 'loading' | 'none' | 'error' | CivitaiRef>>({});
+  useEffect(() => {
+    if (!open || source !== 'local' || !localSelected || refs[localSelected] || !/\.safetensors$/i.test(localSelected)) return;
+    const name = localSelected;
+    setRefs((value) => ({ ...value, [name]: 'loading' }));
+    findLoraOnCivitai(name)
+      .then((answer) => setRefs((value) => ({ ...value, [name]: answer.found && answer.ref ? answer.ref : 'none' })))
+      .catch(() => setRefs((value) => ({ ...value, [name]: 'error' })));
+  }, [open, source, localSelected, refs]);
+  const localRef = refs[localSelected];
+  useEffect(() => { if (localRef && typeof localRef === 'object') civitai.ensureDetails(localRef.versionId); }, [localRef]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // A download asked to be added: add it once ComfyUI lists it, if the stack still has room.
   useEffect(() => {
@@ -195,11 +205,20 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
   const setSearch = source === 'local' ? setQuery : setCivitaiQuery;
   const inUse = current.length;
 
+  /** The card's words: the LoRA's name, then the model it was made for as a badge, and its size. */
+  const cardCopy = (name: string, model: string, bytes: number | undefined, other: boolean, favorite: boolean, title: string) => (
+    <span className="wf-card-copy lb-card-copy">
+      <strong title={title}>{favorite ? <Heart size={11} fill="currentColor" className="lb-fav" aria-label="Favorite" /> : null}{name}</strong>
+      <span>
+        {model ? <em className={cn('lb-model', other && 'is-other')} title={other ? `Made for ${model}, not ${family || 'this model'}` : undefined}>{model}</em> : null}
+        {bytes ? <span>{sizeLabel(bytes)}</span> : null}
+      </span>
+    </span>
+  );
+
   const localCard = (name: string) => {
     const info = infos[name];
-    const base = info?.base || '';
-    const other = fitOf(name) === 'other' && base;
-    const meta = [base || loraFolder(name), sizeLabel(info?.bytes)].filter(Boolean).join(' · ');
+    const model = info?.base || info?.civitaiBase || '';
     return (
       <button
         key={name}
@@ -209,14 +228,9 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
         onClick={() => select(name)}
         onDoubleClick={() => { if (!current.includes(name) && !full) onAdd(name); }}
       >
-        <span className="wf-thumb"><LoraThumb src={loraPreviewUrl(name, info)} label={base || 'LoRA'} small={!base} /></span>
-        {favorites.includes(name) ? <span className="wf-fav" aria-label="Favorite"><Heart size={12} fill="currentColor" /></span> : null}
+        <span className="wf-thumb"><LoraThumb src={loraPreviewUrl(name, info)} label={model || 'LoRA'} plain /></span>
         {current.includes(name) ? <span className="wf-current">In stack</span> : null}
-        <span className="wf-card-copy">
-          <strong title={name}>{loraFileName(name)}</strong>
-          <span>{meta || 'LoRA'}</span>
-        </span>
-        {other ? <span className="wf-status lb-other"><i aria-hidden="true" />Made for {base}</span> : null}
+        {cardCopy(info?.title || (typeof refs[name] === 'object' ? (refs[name] as CivitaiRef).name : '') || loraFileName(name), model, info?.bytes, fitOf(name) === 'other' && Boolean(info?.base), favorites.includes(name), name)}
       </button>
     );
   };
@@ -232,39 +246,43 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
         className={cn('wf-card lb-card', row.id === civitaiRow?.id && 'active')}
         onClick={() => select(row.id)}
       >
-        <span className="wf-thumb"><LoraThumb src={row.preview} label={row.baseModel} /></span>
+        <span className="wf-thumb"><LoraThumb src={row.preview} label={row.baseModel} plain /></span>
         {local && current.includes(local) ? <span className="wf-current">In stack</span> : local ? <span className="wf-current is-quiet">Downloaded</span> : progress ? <span className="wf-current is-quiet"><Loader2 size={10} className="spin" /> {progress}</span> : null}
-        <span className="wf-card-copy">
-          <strong title={row.name}>{row.name}</strong>
-          <span>{[row.creator, row.downloads ? `${countLabel(row.downloads)} downloads` : ''].filter(Boolean).join(' · ') || row.baseModel}</span>
-        </span>
+        {cardCopy(row.name, row.baseModel, row.bytes, false, Boolean(local && favorites.includes(local)), row.name)}
       </button>
     );
   };
 
   const localDetail = (name: string) => {
     const info = infos[name];
-    const favorite = favorites.includes(name);
-    const meta = [info?.base, sizeLabel(info?.bytes), loraFolder(name)].filter(Boolean).join(' · ');
-    const triggers = info?.triggers || [];
+    const ref = refs[name];
+    const found = ref && typeof ref === 'object' ? ref : null;
+    const model = info?.base || found?.baseModel || info?.civitaiBase || '';
+    const title = found?.name || info?.title || loraFileName(name);
+    const other = fitOf(name) === 'other' && Boolean(info?.base);
+    const lookup = ref === 'loading' ? <p className="lb-note"><Loader2 size={12} className="spin" /> Looking it up on Civitai…</p>
+      : ref === 'none' ? <p className="lb-note">Civitai doesn’t know this file, so only what the file itself says is shown.</p>
+      : ref === 'error' ? <p className="lb-note">Civitai couldn’t be asked about this file. <button type="button" className="civitai-card-link" onClick={() => setRefs(({ [name]: _, ...rest }) => rest)}>Try again</button></p>
+      : null;
     return (
-      <>
-        <div className="wf-detail-thumb"><LoraThumb key={name} src={loraPreviewUrl(name, info)} label={info?.base || 'LoRA'} /></div>
-        <div className="wf-detail-head">
-          <h3>{loraFileName(name)}</h3>
-          <button type="button" className={cn('wf-heart', favorite && 'active')} aria-pressed={favorite} aria-label={favorite ? 'Remove from favorites' : 'Add to favorites'} onClick={() => onToggleFavorite(name)}>
-            <Heart size={16} fill={favorite ? 'currentColor' : 'none'} />
-          </button>
-        </div>
-        <p className="wf-detail-meta">{meta || 'LoRA on this computer'}</p>
-        {fitOf(name) === 'other' && info?.base ? <p className="wf-issue">Made for {info.base}, so it may not work with {family || 'this model'}.</p> : null}
-        {localAction(name)}
-        {triggers.length ? (
-          <dl className="civitai-card-facts">
-            <FactRow label="Trigger words" values={triggers} tone="trigger" copied={copied} onCopy={(value, key) => copyWith(() => copyText(value), key)} />
-          </dl>
-        ) : null}
-      </>
+      <LoraDetail
+        key={name}
+        id={name}
+        name={title}
+        fileName={title !== loraFileName(name) ? baseName(name) : loraFolder(name)}
+        model={model}
+        otherModel={other}
+        size={info?.bytes}
+        version={found?.version}
+        previews={[loraPreviewUrl(name, info)]}
+        state={found ? civitai.details[found.versionId] : undefined}
+        triggers={info?.triggers || []}
+        action={localAction(name)}
+        favorite={{ on: favorites.includes(name), toggle: () => onToggleFavorite(name) }}
+        note={<>{other ? <p className="wf-issue">Made for {info?.base}, so it may not work with {family || 'this model'}.</p> : null}{lookup}</>}
+        page={found?.modelId ? `https://civitai.com/models/${found.modelId}?modelVersionId=${found.versionId}` : ''}
+        onRetry={found ? () => civitai.retryDetails(found.versionId) : undefined}
+      />
     );
   };
 
@@ -304,7 +322,23 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
 
   const detail = source === 'local'
     ? (localSelected ? localDetail(localSelected) : empty(<Layers size={22} />, 'No LoRA selected', 'Choose one to see its details.'))
-    : (civitaiRow ? <CivitaiDetail key={civitaiRow.id} row={civitaiRow} state={civitai.details[civitaiRow.versionId]} action={civitaiAction(civitaiRow)} onRetry={() => civitai.retryDetails(civitaiRow)} /> : empty(<Layers size={22} />, 'No LoRA selected', 'Choose one to see its details.'));
+    : (civitaiRow ? (
+      <LoraDetail
+        key={civitaiRow.id}
+        id={civitaiRow.id}
+        name={civitaiRow.name}
+        model={civitaiRow.baseModel}
+        size={civitaiRow.bytes}
+        version={civitaiRow.version}
+        byline={civitaiByline(civitaiRow)}
+        previews={[civitaiRow.preview]}
+        state={civitai.details[civitaiRow.versionId]}
+        action={civitaiAction(civitaiRow)}
+        favorite={installed.get(civitaiRow.file.toLowerCase()) ? { on: favorites.includes(installed.get(civitaiRow.file.toLowerCase())!), toggle: () => onToggleFavorite(installed.get(civitaiRow.file.toLowerCase())!) } : undefined}
+        page={civitaiRow.page}
+        onRetry={() => civitai.retryDetails(civitaiRow.versionId)}
+      />
+    ) : empty(<Layers size={22} />, 'No LoRA selected', 'Choose one to see its details.'));
 
   const searchRef = useRef<HTMLInputElement>(null);
   return (

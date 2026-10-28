@@ -302,7 +302,7 @@ export async function loraDetails(versionId, options = {}) {
   return {
     versionId: id, modelId: number(data.modelId), name: text(data.model?.name, 200), version: text(data.name, 200),
     baseModel: text(data.baseModel, 80), trainedWords: [...new Set((Array.isArray(data.trainedWords) ? data.trainedWords : []).map((word) => plainText(word, 200)).filter(Boolean))].slice(0, 20),
-    strength: strengthOf(data), images,
+    strength: strengthOf(data), images, bytes: Math.round(Number(loraFile(data)?.sizeKB || 0) * 1024),
     page: `${civitaiOrigin(env)}/models/${number(data.modelId) || ""}?modelVersionId=${id}`
   };
 }
@@ -331,8 +331,35 @@ export async function civitaiDownload(id = "", options = {}) {
     id: `civitai:${match[1]}:${match[2]}`, file: name, folder: "loras",
     label: String(version?.model?.name || name), url: url.href,
     bytes: Math.round(Number(file.sizeKB || 0) * 1024), sha256, source: "Civitai",
-    ...(picture ? { preview: sized(picture.url, 450) } : {})
+    ...(picture ? { preview: sized(picture.url, 450) } : {}),
+    // Which Civitai LoRA this is, kept beside the file (lora-previews.js) so its card can show Civitai's details.
+    civitai: civitaiRef(version)
   };
+}
+
+/** The few facts that tie a file to its Civitai page: ids, names, base model. */
+function civitaiRef(version) {
+  return {
+    versionId: Number(version?.id) || 0, modelId: number(version?.modelId) || 0,
+    name: text(version?.model?.name, 200), version: text(version?.name, 200), baseModel: text(version?.baseModel, 80)
+  };
+}
+
+/**
+ * The Civitai version a file is, found by its SHA-256 (for LoRAs that came
+ * from elsewhere). null when Civitai doesn't know the file.
+ */
+export async function versionByHash(sha256, options = {}) {
+  const hash = String(sha256 || "").toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(hash)) return null;
+  try {
+    const version = await civitaiJson(`/api/v1/model-versions/by-hash/${hash}`, { env: options.env || process.env, transport: options.transport });
+    const ref = civitaiRef(version);
+    return ref.versionId ? ref : null;
+  } catch (error) {
+    if (Number(error?.status) === 404) return null;
+    throw error;
+  }
 }
 
 const imageTypes = { "image/jpeg": "jpeg", "image/png": "png", "image/webp": "webp" };

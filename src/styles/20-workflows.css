@@ -78,8 +78,10 @@
   cursor: pointer;
   transition: background var(--motion-fast) var(--motion-ease);
 }
-.wf-card:hover { background: rgb(255 255 255 / .035); }
-.wf-card.active { background: rgb(255 255 255 / .06); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); }
+/* Every card has its edge; the selected one a brighter edge on a lifted fill. */
+.wf-card { align-items: stretch; box-shadow: inset 0 0 0 1px var(--surface-border); }
+.wf-card:hover { background: rgb(255 255 255 / .035); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12); }
+.wf-card.active { background: rgb(255 255 255 / .06); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .32); }
 .wf-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 .wf-thumb {
