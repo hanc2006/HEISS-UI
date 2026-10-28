@@ -44,6 +44,7 @@ import { emptyTrash, restoreTrash, scheduleTrashPurge, trashGalleryItems, trashS
 import { jobs, queueClearsAt, runJob, runMockJob, setTerminalJob } from './jobs.js';
 import { cancelPrompt, cancelPrompts } from './comfy-queue.js';
 import { loraInfos } from './lora-info.js';
+import { loraFileFacts, loraPreview, saveLoraPreview } from './lora-previews.js';
 import { hfEndpoint, hfTokenStatus, saveHfToken } from './hf-access.js';
 import { civitaiDownload, civitaiStatus, loraDetails, saveCivitaiMature, saveCivitaiToken, searchLoras } from './civitai-api.js';
 import { deleteImportedWorkflow, getCustomWorkflow, saveImportedWorkflow, userWorkflowsDir, validateGraph } from './custom-workflows.js';
@@ -916,6 +917,8 @@ app.post("/api/models/downloads", async (req, res) => {
   if (!spec) return;
   try {
     const download = startDownload(spec);
+    // A Civitai LoRA brings its first picture along, for the LoRA browser's card. Best effort.
+    if (spec.preview) saveLoraPreview(spec).catch(() => {});
     // Already on disk: rescan now so the model page catches up without another click.
     if (download?.already) await loadComfyContext({ force: true }).catch(() => null);
     res.json({ ok: true, download, ...downloadState() });
@@ -1541,10 +1544,24 @@ app.post("/api/loras/library/ops", (req, res) => {
 app.get("/api/loras/info", async (_req, res) => {
   try {
     const { info } = await loadComfyContext();
-    res.json({ ok: true, loras: await loraInfos(optionsFor(info, "LoraLoader", "lora_name")) });
+    const names = optionsFor(info, "LoraLoader", "lora_name");
+    const infos = await loraInfos(names);
+    // Size and picture for the LoRA browser's cards, when the file is on this computer.
+    for (const name of names) {
+      const facts = loraFileFacts(name);
+      if (facts) infos[name] = { families: [], base: "", triggers: [], ...infos[name], ...facts };
+    }
+    res.json({ ok: true, loras: infos });
   } catch (error) {
     res.status(503).json({ ok: false, loras: {}, error: comfyDownMessage(error?.message) });
   }
+});
+
+// A LoRA's picture, saved beside it (lora-previews.js); ?v= is its version, so it can be cached.
+app.get("/api/loras/preview", (req, res) => {
+  const preview = loraPreview(String(req.query.name || ""));
+  if (!preview) return res.status(404).end();
+  res.sendFile(preview.file, { headers: { "Cache-Control": "private, max-age=86400" } });
 });
 
 app.get("/api/loras/:workflowId", (req, res) => {

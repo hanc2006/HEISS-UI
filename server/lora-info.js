@@ -194,7 +194,7 @@ export function familiesFromKeys(header) {
 
 /* ------------------------------------------------------------ Files */
 
-function localLoraFile(name) {
+export function localLoraFile(name) {
   const parts = String(name).split(/[\\/]/).filter(Boolean);
   if (!parts.length || parts.some((part) => part === "..") || !/\.safetensors$/i.test(name)) return "";
   for (const dir of modelFolders("loras", ["loras"])) {

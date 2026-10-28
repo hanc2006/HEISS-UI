@@ -115,122 +115,70 @@
 .lora-empty p { margin: 0; max-width: 34ch; font-size: 12.5px; line-height: 1.55; }
 .lora-empty.is-unavailable { border-style: solid; border-color: var(--surface-border); }
 
-/* Header: count on the left, quiet bulk actions on the right. */
+/* Header: count on the left, the Stack menu on the right. */
 .lora-head { display: flex; align-items: center; gap: 4px; min-height: 28px; padding: 0 2px; }
 .lora-count { flex: 1; font-size: 12px; font-weight: 550; color: hsl(var(--foreground)); font-variant-numeric: tabular-nums; }
 .lora-count em { font-style: normal; font-weight: 500; color: hsl(var(--muted-foreground)); }
-.lora-head-action {
-  height: 26px;
-  padding: 0 10px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: transparent;
-  color: hsl(var(--muted-foreground));
-  font-size: 11.5px;
-  font-weight: 550;
-  cursor: pointer;
-  transition: background var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
-}
-.lora-head-action:hover { background: var(--control-hover); color: #fff; }
-
-/* Stacks: saved sets as chips, loaded with one click. */
-.lora-stacks { display: grid; gap: 8px; }
-.lora-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.lora-chip {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  max-width: 100%;
-  border-radius: var(--r-pill);
-  background: var(--control-fill);
-  box-shadow: inset 0 0 0 1px var(--surface-border);
-  transition: background var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
-}
-.lora-chip:hover { background: var(--control-hover); }
-.lora-chip.is-active { background: var(--action); box-shadow: none; }
-.lora-chip-load {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-width: 0;
-  height: 30px;
-  padding: 0 12px;
-  border: 0;
-  background: transparent;
-  color: hsl(var(--foreground));
-  font-size: 12.5px;
-  font-weight: 550;
-  cursor: pointer;
-}
-.lora-chip-name { min-width: 0; max-width: 150px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lora-chip-load em { min-width: 12px; text-align: center; transition: opacity var(--motion-fast) var(--motion-ease); font-style: normal; font-size: 11px; font-weight: 600; color: hsl(var(--muted-foreground)); font-variant-numeric: tabular-nums; }
-.lora-chip.is-active .lora-chip-load { color: var(--action-ink); }
-.lora-chip.is-active .lora-chip-load em { color: rgb(10 10 10 / .5); }
-/* Modified: a small ember square, the same status marker used everywhere. */
-.lora-chip.is-modified .lora-chip-load::before { content: ""; width: 6px; height: 6px; flex: none; background: var(--ember); }
-/* The x takes the count's place on hover, so chips never reserve room for it. */
-.lora-chip-remove {
-  position: absolute;
-  right: 5px;
-  top: 50%;
-  translate: 0 -50%;
-  width: 22px;
-  height: 22px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: 50%;
-  background: transparent;
-  color: hsl(var(--muted-foreground));
-  opacity: 0;
-  cursor: pointer;
-  transition: opacity var(--motion-fast) var(--motion-ease), background var(--motion-fast) var(--motion-ease);
-}
-.lora-chip:hover .lora-chip-load em,
-.lora-chip:focus-within .lora-chip-load em { opacity: 0; }
-.lora-chip:hover .lora-chip-remove,
-.lora-chip:focus-within .lora-chip-remove { opacity: 1; }
-.lora-chip-remove:hover { background: var(--danger-fill); color: var(--danger-ink); }
-.lora-chip.is-active .lora-chip-remove { color: rgb(10 10 10 / .55); }
-.lora-chip.is-active .lora-chip-remove:hover { background: rgb(10 10 10 / .1); color: var(--action-ink); }
-.lora-tip-hint { color: hsl(var(--muted-foreground)); font-size: 11px; }
-
-.lora-save-chip {
-  justify-self: start;
+.lora-stack-button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  height: 30px;
-  padding: 0 12px;
-  border: 1px dashed rgb(255 255 255 / .18);
+  max-width: 60%;
+  height: 28px;
+  padding: 0 10px 0 12px;
+  border: 0;
   border-radius: var(--r-pill);
-  background: transparent;
+  background: var(--control-fill);
   color: hsl(var(--foreground));
   font-size: 12px;
   font-weight: 550;
   cursor: pointer;
-  transition: background var(--motion-fast) var(--motion-ease), border-color var(--motion-fast) var(--motion-ease);
+  transition: background var(--motion-fast) var(--motion-ease);
 }
-.lora-save-chip span { font-weight: 500; color: hsl(var(--muted-foreground)); }
-.lora-save-chip:hover { background: var(--control-fill); border-color: rgb(255 255 255 / .3); }
+.lora-stack-button span { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lora-stack-button svg { flex: none; color: hsl(var(--muted-foreground)); transition: transform var(--motion-fast) var(--motion-ease); }
+.lora-stack-button.is-open svg { transform: rotate(180deg); }
+.lora-stack-button:hover, .lora-stack-button.is-open { background: var(--control-hover); }
+.lora-stack-button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+/* Changed since saved: the small ember square, the status marker used everywhere. */
+.lora-stack-button i { width: 6px; height: 6px; flex: none; background: var(--ember); }
 
-.lora-stack-changes { display: flex; align-items: center; gap: 2px; min-height: 26px; font-size: 12px; color: hsl(var(--muted-foreground)); }
-.lora-stack-changes > span { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
-.lora-stack-changes > span i { width: 6px; height: 6px; flex: none; background: var(--ember); }
-.lora-text-action {
-  height: 26px;
-  padding: 0 9px;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: transparent;
-  color: hsl(var(--muted-foreground));
-  font-size: 12px;
-  font-weight: 550;
-  cursor: pointer;
-  transition: background var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
+/* The Stack menu opens in place under the header, so the sidebar never clips it. */
+.lora-menu {
+  display: grid;
+  gap: 2px;
+  padding: 6px;
+  border-radius: calc(var(--r-item) + 2px);
+  background: var(--surface-float);
+  box-shadow: inset 0 0 0 1px var(--surface-border), 0 12px 32px rgb(0 0 0 / .35);
+  animation: set-page-in var(--motion-base) var(--motion-ease);
 }
-.lora-text-action:hover { background: var(--control-hover); color: #fff; }
-.lora-text-action.is-strong { color: hsl(var(--foreground)); }
+.lora-menu-group { display: grid; gap: 1px; }
+.lora-menu-group + .lora-menu-group { margin-top: 4px; padding-top: 6px; box-shadow: inset 0 1px 0 var(--surface-border); }
+.lora-menu-heading { padding: 4px 10px 4px; font-size: 11px; font-weight: 550; color: hsl(var(--muted-foreground)); }
+.lora-menu-hint { margin: 0; padding: 6px 10px 8px; font-size: 12px; line-height: 1.5; color: hsl(var(--muted-foreground)); }
+.lora-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--r-item);
+  background: transparent;
+  color: hsl(var(--foreground));
+  font-size: 12.5px;
+  font-weight: 500;
+  text-align: left;
+  cursor: pointer;
+}
+.lora-menu-item strong { font-weight: 600; }
+.lora-menu-item:hover:not(:disabled), .lora-menu-item:focus-visible { outline: none; background: var(--control-hover); }
+.lora-menu-item.is-danger { color: var(--danger-ink, #ff8a80); }
+.lora-menu-check { flex: none; width: 14px; display: grid; place-items: center; color: var(--ember); }
+.lora-menu-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lora-menu-item em { font-style: normal; font-size: 11px; color: hsl(var(--muted-foreground)); font-variant-numeric: tabular-nums; }
+.lora-menu .lora-name-field { margin: 4px 0 2px; }
 
 .lora-name-field {
   display: flex;
@@ -264,13 +212,13 @@
 .lora-chip-action.is-primary:hover:not(:disabled) { background: #fff; }
 .lora-chip-action:disabled { opacity: .4; cursor: default; }
 
-/* Cards: one left edge for name, slider and warnings. The grip lives in the
-   card's left margin and, like remove, only shows on hover or focus. */
+/* Rows: picture and name (they open the browser), remove, switch; strength
+   underneath. The grip lives in the left margin and, like remove, shows on hover or focus. */
 .lora-list { display: grid; gap: 6px; }
 .lora-card {
   position: relative;
   display: grid;
-  gap: 6px;
+  gap: 8px;
   padding: 10px 12px 12px 16px;
   border-radius: calc(var(--r-item) + 2px);
   /* Each card is its own frosted pane, so cards passing over each other while
@@ -284,7 +232,7 @@
 }
 .lora-card:hover { background: var(--surface-grain), rgb(44 44 44 / .66); }
 .lora-card.has-warning { box-shadow: inset 0 0 0 1px rgb(255 154 82 / .24); }
-.lora-card.is-off .lora-name,
+.lora-card.is-off .lora-open,
 .lora-card.is-off .lora-strength { opacity: .45; }
 
 .lora-grip {
@@ -310,26 +258,27 @@
 .lora-grip:hover { color: hsl(var(--foreground)); }
 .lora-grip:active { cursor: grabbing; }
 
-.lora-card-top { display: flex; align-items: center; gap: 4px; min-width: 0; min-height: 26px; }
-.lora-name {
+.lora-card-top { display: flex; align-items: center; gap: 4px; min-width: 0; min-height: 34px; }
+.lora-open {
   flex: 1;
   min-width: 0;
-  margin-left: -6px;
-  padding: 3px 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: -4px;
+  padding: 3px 6px 3px 4px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--r-item);
   background: transparent;
   color: hsl(var(--foreground));
-  font-size: 13px;
-  font-weight: 550;
   text-align: left;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
   cursor: pointer;
   transition: background var(--motion-fast) var(--motion-ease), opacity var(--motion-fast) var(--motion-ease);
 }
-.lora-name:hover { background: var(--control-hover); }
+.lora-open:hover { background: var(--control-hover); }
+.lora-open:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.lora-row-thumb.wf-thumb { flex: none; width: 32px; height: 32px; aspect-ratio: auto; border-radius: 7px; }
+.lora-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 550; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .lora-remove {
   flex: none;
   width: 24px;
@@ -374,62 +323,9 @@
 .lora-trigger:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .lora-trigger.is-copied { color: hsl(var(--foreground)); background: rgb(255 255 255 / .12); }
 
-/* Strength: a slim slider and a value that reads as text until you edit it. */
-.lora-strength { display: flex; align-items: center; gap: 8px; transition: opacity var(--motion-fast) var(--motion-ease); }
-.lora-strength input[type="range"] {
-  flex: 1;
-  min-width: 0;
-  height: 18px;
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  box-shadow: none;
-  -webkit-appearance: none;
-  appearance: none;
-  cursor: pointer;
-}
-.lora-strength input[type="range"]::-webkit-slider-runnable-track {
-  height: 3px;
-  border-radius: var(--r-pill);
-  background: linear-gradient(to right, hsl(var(--foreground) / .85) var(--fill), rgb(255 255 255 / .1) var(--fill));
-}
-.lora-strength input[type="range"]::-moz-range-track { height: 3px; border-radius: var(--r-pill); background: rgb(255 255 255 / .1); }
-.lora-strength input[type="range"]::-moz-range-progress { height: 3px; border-radius: var(--r-pill); background: hsl(var(--foreground) / .85); }
-.lora-strength input[type="range"]::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
-  margin-top: -4.5px;
-  border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 1px 3px rgb(0 0 0 / .5);
-  transition: scale var(--motion-fast) var(--motion-ease);
-}
-.lora-strength input[type="range"]::-moz-range-thumb { width: 12px; height: 12px; border: 0; border-radius: 50%; background: #fff; }
-.lora-strength input[type="range"]:hover::-webkit-slider-thumb,
-.lora-strength input[type="range"]:active::-webkit-slider-thumb { scale: 1.2; }
-.lora-strength input[type="range"]:focus-visible { outline: none; }
-.lora-strength input[type="range"]:focus-visible::-webkit-slider-thumb { box-shadow: var(--focus-ring); }
-.lora-strength-value {
-  flex: none;
-  width: 44px;
-  height: 24px;
-  margin-right: -6px;
-  padding: 0;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  color: hsl(var(--foreground) / .85);
-  font: 500 12px/1 var(--font-mono);
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  cursor: text;
-  transition: background var(--motion-fast) var(--motion-ease);
-}
-.lora-strength-value:hover { background: var(--control-fill); }
-.lora-strength-value:focus { outline: none; background: var(--well); color: #fff; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .18); }
+/* Strength: the same − value + stepper as Prompt strength (CFG). */
+.lora-strength { display: grid; gap: 4px; transition: opacity var(--motion-fast) var(--motion-ease); }
+.lora-strength .number-picker { width: 100%; }
 
 .lora-undo {
   display: flex;
@@ -450,176 +346,43 @@
 
 .lora-add { width: 100%; }
 
-/* ---------------------------------------------------------------- Picker */
+/* ---------------------------------------------------------- LoRA browser
+   The workflow gallery's layout (20-workflows.css), with LoRAs in it (LoraBrowser.tsx). */
 
-.lora-picker { display: flex; flex-direction: column; gap: 10px; min-height: 0; max-height: min(62dvh, 560px); }
-.lora-picker-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 12px; color: hsl(var(--muted-foreground)); }
-.lora-picker-head strong { color: hsl(var(--foreground)); font-weight: 550; }
-.lora-picker-back { height: 32px; min-height: 32px; padding: 0 10px 0 6px; font-size: 12.5px; }
-.lora-picker-search {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  height: var(--control-h);
-  padding: 0 6px 0 14px;
-  border-radius: var(--r-pill);
-  background: var(--well);
-  color: hsl(var(--muted-foreground));
-}
-.lora-picker-search:focus-within { box-shadow: inset 0 0 0 1px rgb(255 255 255 / .16); }
-.lora-picker-search input { flex: 1; min-width: 0; height: 100%; color: hsl(var(--foreground)); font-size: 13px; }
-.lora-picker-search button { width: 28px; height: 28px; display: grid; place-items: center; border: 0; border-radius: var(--r-pill); background: transparent; color: inherit; cursor: pointer; }
-.lora-picker-list { flex: 1; min-height: 120px; overflow-y: auto; overscroll-behavior: contain; margin: 0 -4px; padding: 0 4px; }
-.lora-picker-section { display: grid; gap: 1px; padding-bottom: 8px; }
-.lora-picker-heading {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  height: 28px;
-  padding: 0 8px;
-  border: 0;
-  background: transparent;
-  color: hsl(var(--muted-foreground));
-  font-size: 11.5px;
-  font-weight: 550;
-  text-align: left;
-  cursor: pointer;
-}
-.lora-picker-heading span { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lora-picker-heading em { font-style: normal; font-variant-numeric: tabular-nums; opacity: .7; }
-.lora-picker-heading svg { transition: transform var(--motion-fast) var(--motion-ease); }
-.lora-picker-heading svg.is-collapsed { transform: rotate(-90deg); }
-.lora-picker-heading.is-static { cursor: default; }
-.lora-picker-heading:not(.is-static):hover { color: hsl(var(--foreground)); }
-
-.lora-option {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-height: 40px;
-  padding: 4px 4px 4px 10px;
-  border-radius: var(--r-item);
-  cursor: pointer;
-}
-.lora-option.is-highlight { background: var(--control-fill); }
-.lora-option.is-selected { background: rgb(255 255 255 / .09); }
-.lora-option[aria-disabled="true"] { cursor: default; }
-.lora-option.is-added { opacity: .5; }
-.lora-option-check {
-  flex: none;
-  width: 16px;
-  height: 16px;
-  display: grid;
-  place-items: center;
-  border-radius: 5px;
-  box-shadow: inset 0 0 0 1.5px rgb(255 255 255 / .22);
-  color: var(--action-ink);
-}
-.lora-option.is-selected .lora-option-check { background: var(--action); box-shadow: none; }
-.lora-option.is-added .lora-option-check { background: rgb(255 255 255 / .2); box-shadow: none; color: hsl(var(--foreground)); }
-.lora-option-copy { flex: 1; min-width: 0; display: grid; gap: 1px; }
-.lora-option-copy strong { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lora-option-copy span { font-size: 11px; color: hsl(var(--muted-foreground)); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lora-option > em { flex: none; font-size: 11px; font-style: normal; color: hsl(var(--muted-foreground)); }
-/* Made for another model: named, a little dimmer, never hidden. */
-.lora-option > em.lora-fit { max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; opacity: .75; }
-.lora-option.is-other-model .lora-option-copy strong { color: hsl(var(--foreground) / .7); }
-.lora-option-star {
-  flex: none;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border: 0;
-  border-radius: var(--r-pill);
-  background: transparent;
-  color: hsl(var(--muted-foreground) / .5);
-  opacity: 0;
-  cursor: pointer;
-}
-.lora-option:hover .lora-option-star,
-.lora-option.is-highlight .lora-option-star,
-.lora-option-star.active,
-.lora-option-star:focus-visible { opacity: 1; }
-.lora-option-star:hover { background: var(--control-hover); color: #fff; }
-.lora-option-star.active { color: var(--ember); }
-
-/* The picker's two sources: this computer, and Civitai (CivitaiLoras.tsx). */
-.lora-source .segmented { width: 100%; }
-.lora-source .segmented button { flex: 1; }
-/* Mature content on: searches go to civitai.red, and its tab says so. */
+/* Local and Civitai: Civitai turns red when mature content is on (searches go to civitai.red). */
+.lora-source .segmented button.active { font-weight: 600; }
 .lora-source.is-mature .segmented button:last-child { color: #ff5a5a; }
 .lora-source.is-mature .segmented button:last-child.active { background: #4a1416; color: #ff4d4d; }
 
-/* In the sidebar the picker takes all the height there is; its list scrolls inside. */
-.sidebar-body > .lora-panel:has(> .lora-picker) { flex: 1 1 0; min-height: 320px; }
-.sidebar-body > .lora-panel > .lora-picker { flex: 1; min-height: 0; max-height: none; }
-
-/* Rows never push the list sideways: everything in them shrinks or ellipsizes. */
-.civitai-list { overflow-x: hidden; }
-.civitai-row { cursor: pointer; padding: 4px; min-width: 0; }
-.civitai-row:hover, .civitai-row:focus-visible { background: var(--control-fill); }
-.civitai-row:focus-visible { outline: 2px solid var(--ember); outline-offset: -2px; }
-.civitai-thumb {
-  flex: none;
-  width: 40px;
-  height: 40px;
-  overflow: hidden;
-  border-radius: calc(var(--r-item) - 2px);
-  background: rgb(255 255 255 / .05);
-}
-.civitai-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
-.civitai-row .lora-option-copy span { white-space: nowrap; }
-.civitai-row .lora-option-copy .civitai-error { white-space: normal; color: var(--ember); }
-/* One width for every state of the button (size, Add, Retry, progress), so rows line up. */
-.civitai-action, .civitai-row > em, .civitai-card-head > em {
-  flex: none;
-  width: 78px;
-  height: 28px;
-  min-height: 28px;
-  padding: 0 6px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 5px;
-  font-size: 11px;
-  font-style: normal;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-.civitai-action svg { width: 12px; height: 12px; flex: none; }
-.civitai-row > em, .civitai-card-head > em { color: hsl(var(--muted-foreground)); }
+.wf-card.lb-card { align-items: stretch; }
+.lb-card .wf-current.is-quiet { color: hsl(var(--muted-foreground)); }
+.lb-card .wf-current.is-quiet::before { display: none; }
+.lb-card .wf-current svg { flex: none; }
+/* Made for another model: said under the name, in the warning's color. */
+.wf-status.lb-other { color: var(--ember); opacity: .85; }
+.lb-scope { flex: none; margin: 0; padding: 0 22px; min-height: 56px; display: flex; align-items: center; font-size: 12px; color: hsl(var(--muted-foreground)); }
+.lb-grid-foot { grid-column: 1 / -1; display: grid; justify-items: center; }
+.lb-scope strong { font-weight: 550; color: hsl(var(--foreground)); }
+.lb-note { margin: -6px 0 0; font-size: 12px; line-height: 1.5; color: hsl(var(--muted-foreground)); }
+.lb-note.is-error { color: var(--ember); }
+.lb-more { margin: 4px 0 8px; }
 .civitai-loading { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px 0; font-size: 12.5px; color: hsl(var(--muted-foreground)); }
-.civitai-more { width: 100%; margin-top: 4px; }
 
-/* A LoRA's card, in place of the list: picture, usage tips, trigger words, configuration, prompt. */
-.lora-picker.has-card { max-height: min(86dvh, 820px); }
-.civitai-card {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 100%;
-  box-sizing: border-box;
-  padding: 8px;
-  border-radius: var(--r-item);
-  background: rgb(255 255 255 / .04);
-  border: 1px solid var(--surface-border);
-  min-width: 0;
-}
+/* A Civitai LoRA in the detail panel: pictures, name, button, usage tips, prompt, link. */
+.civitai-card { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
 .civitai-card-media {
   position: relative;
-  /* One height for every picture, whatever its shape; cover fills it. */
   flex: none;
-  height: 300px;
-  border-radius: calc(var(--r-item) - 2px);
+  aspect-ratio: 4 / 3;
+  border-radius: var(--r-item);
   overflow: hidden;
-  background: rgb(0 0 0 / .35);
+  background: var(--well);
 }
 .civitai-card-media img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
-.civitai-card-step, .civitai-card-close {
+.civitai-card-step {
   position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
   display: grid;
   place-items: center;
   width: 30px;
@@ -631,11 +394,9 @@
   cursor: pointer;
   backdrop-filter: blur(6px);
 }
-.civitai-card-step { top: 50%; transform: translateY(-50%); }
 .civitai-card-step.is-prev { left: 6px; }
 .civitai-card-step.is-next { right: 6px; }
-.civitai-card-close { top: 6px; right: 6px; }
-.civitai-card-step:hover, .civitai-card-close:hover { background: rgb(0 0 0 / .75); }
+.civitai-card-step:hover { background: rgb(0 0 0 / .75); }
 .civitai-card-count {
   position: absolute;
   bottom: 6px;
@@ -648,15 +409,11 @@
   font-size: 11px;
   font-variant-numeric: tabular-nums;
 }
-.civitai-card-head { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.civitai-card-name { flex: 1; min-width: 0; display: grid; gap: 2px; }
-.civitai-card-title { min-width: 0; font-size: 14px; font-weight: 550; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.civitai-card-name > span { font-size: 11.5px; color: hsl(var(--muted-foreground)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* Civitai's details, without its lines: groups of rows, label left and top, values right. */
+/* Civitai's details, without its lines: label left and top, values right. */
 .civitai-card-facts { display: grid; gap: 8px; margin: 0; }
 .civitai-fact { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-width: 0; }
 .civitai-fact dt { flex: none; padding-top: 4px; font-size: 12.5px; line-height: 1.3; color: hsl(var(--muted-foreground)); }
-/* Values side by side, wrapping to the next line when they run out of room; the copy comes last. */
+/* Values side by side, wrapping when they run out of room; the copy comes last. */
 .civitai-fact dd { flex: 1; min-width: 0; display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: flex-end; gap: 5px; margin: 0; }
 .civitai-badge {
   display: inline-flex;
@@ -689,18 +446,13 @@
 .civitai-card-icon:hover { background: var(--control-hover); color: hsl(var(--foreground)); }
 .civitai-card-link { justify-self: start; padding: 0; border: 0; background: none; color: var(--ember); font-size: 12px; cursor: pointer; }
 .civitai-card-note { margin: 0; font-size: 12px; color: hsl(var(--muted-foreground)); }
-/* Civitai's own page, at the bottom right of the card. */
+/* Civitai's own page, at the bottom right. */
 .civitai-card-open { margin-top: auto; align-self: flex-end; display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: hsl(var(--muted-foreground)); text-decoration: none; }
 .civitai-card-open:hover { color: hsl(var(--foreground)); }
 
-.lora-picker-foot { flex: none; display: flex; align-items: center; justify-content: space-between; gap: 10px; padding-top: 10px; box-shadow: inset 0 1px 0 var(--surface-border); }
-.lora-picker-foot > span { font-size: 11.5px; color: hsl(var(--muted-foreground)); }
-
 @media (hover: none) {
   .lora-grip,
-  .lora-remove,
-  .lora-chip-remove,
-  .lora-option-star { opacity: 1; }
+  .lora-remove { opacity: 1; }
 }
 
 /* The composer's LoRA count opens the LoRA tab. */
@@ -875,3 +627,13 @@ button.lora-pill:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .sidebar-switch-row > span { display: grid; gap: 2px; min-width: 0; }
 .sidebar-switch-row strong { font-size: 12.5px; font-weight: 550; color: hsl(var(--foreground)); }
 .sidebar-switch-row small { font-size: 11.5px; line-height: 1.4; color: hsl(var(--muted-foreground)); }
+
+/* On a phone the LoRA browser's search takes its own line, with Local and Civitai under it. */
+@media (max-width: 760px) {
+  .lora-browser .wf-toolbar { flex-wrap: wrap; }
+  .lora-browser .wf-search { flex-basis: 100%; }
+  .lora-browser .lora-source { flex: 1; }
+  .lora-browser .lora-source .segmented { width: 100%; }
+  .lora-browser .lora-source .segmented button { flex: 1; }
+  .lb-scope { padding: 0 14px; min-height: 44px; }
+}

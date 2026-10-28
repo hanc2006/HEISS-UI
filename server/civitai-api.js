@@ -325,9 +325,32 @@ export async function civitaiDownload(id = "", options = {}) {
   if (!file || !name || !/^[0-9a-f]{64}$/.test(sha256) || !isCivitaiUrl(file.downloadUrl)) return null;
   const url = new URL(file.downloadUrl);
   url.hostname = new URL(civitaiOrigin(env)).hostname;
+  // The version's first picture this setting may show, saved next to the LoRA as its preview (lora-previews.js).
+  const [picture] = showable(version?.images, civitaiMature(env));
   return {
     id: `civitai:${match[1]}:${match[2]}`, file: name, folder: "loras",
     label: String(version?.model?.name || name), url: url.href,
-    bytes: Math.round(Number(file.sizeKB || 0) * 1024), sha256, source: "Civitai"
+    bytes: Math.round(Number(file.sizeKB || 0) * 1024), sha256, source: "Civitai",
+    ...(picture ? { preview: sized(picture.url, 450) } : {})
   };
+}
+
+const imageTypes = { "image/jpeg": "jpeg", "image/png": "png", "image/webp": "webp" };
+const maxPreviewBytes = 5 * 1024 * 1024;
+
+/**
+ * One picture from Civitai's image servers, without the API key (pictures
+ * don't need it): { bytes, ext } for a JPEG, PNG or WebP of at most 5 MB,
+ * else null. Only addresses on Civitai's image hosts are asked.
+ */
+export async function civitaiImage(value, { env = process.env, transport = null } = {}) {
+  if (!isCivitaiImage(value)) return null;
+  const response = await guardedFetch(value, { signal: AbortSignal.timeout(20000) }, { env, transport, service: "Civitai" });
+  const ext = imageTypes[String(response.headers.get("content-type") || "").split(";")[0].trim().toLowerCase()];
+  if (!response.ok || !ext || Number(response.headers.get("content-length") || 0) > maxPreviewBytes) {
+    await response.body?.cancel().catch(() => {});
+    return null;
+  }
+  const bytes = Buffer.from(await response.arrayBuffer());
+  return bytes.length && bytes.length <= maxPreviewBytes ? { bytes, ext } : null;
 }

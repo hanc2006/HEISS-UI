@@ -116,6 +116,12 @@ function targetFor(spec) {
   return { dir, target: path.join(dir, name), partial: path.join(dir, `${name}.part`), note: path.join(dir, `${name}.part.json`) };
 }
 
+/** The folder a download's file sits in, or will land in: for files that go beside it (a LoRA's preview). */
+export function downloadFolder(spec) {
+  const existing = existingCopy(spec);
+  return existing ? path.dirname(existing) : targetFor(spec).dir;
+}
+
 /** ComfyUI's own folders for this kind first (extra_model_paths.yaml included), then models/<folder>. */
 function folderDirs(folder) {
   const subfolders = folder === "text_encoders" ? ["text_encoders", "clip"] : folder === "diffusion_models" ? ["diffusion_models", "unet"] : [folder];

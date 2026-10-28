@@ -885,12 +885,13 @@
 
 /* The LoRA panel keeps its logic and gets thumb-sized parts. */
 .phone-loras { display: grid; gap: 10px; }
-.phone-loras button { min-height: 44px; }
-.phone-loras input[type="range"] { height: 40px; }
-.phone-loras input[type="range"]::-webkit-slider-thumb { width: 26px; height: 26px; margin-top: -11px; }
+/* Thumb-sized: the buttons that are bars. The switch, trigger chips and stepper keep their own shapes. */
+.phone-loras .lora-add,
+.phone-loras .lora-stack-button,
+.phone-loras .lora-menu-item,
+.phone-loras .lora-open { min-height: 44px; }
+.phone-loras .lora-remove { width: 36px; height: 36px; }
 .phone-loras .lora-card { padding: 12px; border-radius: 16px; }
-/* The picker replaces the list in place; on a phone it may use most of the screen. */
-.phone-loras .lora-picker { max-height: none; }
 
 /* ----------------------------------------------------------- Selecting */
 

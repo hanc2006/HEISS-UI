@@ -1,42 +1,101 @@
-import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, Plus, RotateCw, Search, X } from 'lucide-react';
+import React, { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, ExternalLink, Loader2 } from 'lucide-react';
 import { loadLoraDetails, searchCivitaiLoras, type CivitaiLora, type CivitaiLoraDetails } from './civitai';
 import { copyText } from './api';
 import { CopyIcon, useCopyFeedback } from './CopyFeedback';
-import { useThisComputer } from './device';
 import { cn } from './format';
 import { SafeImg } from './SafeImg';
-import { downloadFor, useModelDownloads } from './useModelDownloads';
 import type { Profile } from './types';
 
-function sizeLabel(bytes: number) {
+export function sizeLabel(bytes = 0) {
   if (!bytes) return '';
   if (bytes >= 1024 ** 3) return `${(bytes / 1024 ** 3).toFixed(1)} GB`;
   if (bytes >= 1024 ** 2) return `${Math.round(bytes / 1024 ** 2)} MB`;
   return `${Math.max(1, Math.round(bytes / 1024))} KB`;
 }
 
-const baseName = (name: string) => name.split(/[\\/]/).pop() || name;
-
 /** 1234 → "1.2K", like Civitai. */
-function countLabel(count: number) {
+export function countLabel(count: number) {
   if (count >= 1_000_000) return `${(count / 1_000_000).toFixed(1).replace(/\.0$/, '')}M`;
   if (count >= 1_000) return `${(count / 1_000).toFixed(1).replace(/\.0$/, '')}K`;
   return String(count);
 }
 
+export type DetailsState = { loading: true } | { loading: false; error: string } | { loading: false; details: CivitaiLoraDetails };
 
-type DetailsState = { loading: true } | { loading: false; error: string } | { loading: false; details: CivitaiLoraDetails };
+export type CivitaiSearchState = { loading: boolean; error: string; unsupported: boolean; bases: string[]; site: string };
 
 /**
- * One LoRA, opened from the list: its pictures and how they were made, the
- * maker's trigger words and usage tips, and the same Download / Add button.
+ * Civitai's LoRAs for the model in use: only LoRAs made for the model's base
+ * (the server asks Civitai for those). Typing searches after a short pause;
+ * an empty box shows the most downloaded. Nothing is asked until `enabled`.
  */
-function LoraCard({ row, state, action, onClose, onRetry }: {
+export function useCivitaiLoras({ enabled, query, profile }: { enabled: boolean; query: string; profile: Profile | null }) {
+  const [rows, setRows] = useState<CivitaiLora[]>([]);
+  const [cursor, setCursor] = useState('');
+  const [state, setState] = useState<CivitaiSearchState>({ loading: true, error: '', unsupported: false, bases: [], site: '' });
+  const [details, setDetails] = useState<Record<number, DetailsState>>({});
+  const request = useRef<AbortController | null>(null);
+  const family = profile?.family || '';
+  const model = profile?.model || '';
+
+  const load = async (text: string, after = '') => {
+    request.current?.abort();
+    const controller = new AbortController();
+    request.current = controller;
+    setState((value) => ({ ...value, loading: true, error: '' }));
+    try {
+      const result = await searchCivitaiLoras({ query: text, family, model, cursor: after }, controller.signal);
+      if (controller.signal.aborted) return;
+      setRows((list) => (after ? [...list, ...result.rows.filter((row) => !list.some((item) => item.id === row.id))] : result.rows));
+      setCursor(result.nextCursor || '');
+      setState({ loading: false, error: '', unsupported: Boolean(result.unsupported), bases: result.bases || [], site: result.site || '' });
+    } catch (error) {
+      if (controller.signal.aborted || (error as Error)?.name === 'AbortError') return;
+      setState((value) => ({ ...value, loading: false, error: error instanceof Error ? error.message : 'Civitai couldn’t be reached.' }));
+    }
+  };
+
+  useEffect(() => {
+    if (!enabled) return;
+    const timer = window.setTimeout(() => { void load(query.trim()); }, query ? 350 : 0);
+    return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, query, family, model]);
+  useEffect(() => () => request.current?.abort(), []);
+
+  const fetchDetails = async (row: CivitaiLora) => {
+    setDetails((value) => ({ ...value, [row.versionId]: { loading: true } }));
+    try {
+      const result = await loadLoraDetails(row.versionId);
+      setDetails((value) => ({ ...value, [row.versionId]: { loading: false, details: result } }));
+    } catch (error) {
+      setDetails((value) => ({ ...value, [row.versionId]: { loading: false, error: error instanceof Error ? error.message : 'Civitai couldn’t be reached.' } }));
+    }
+  };
+  /** Details for a row, asked once (again after a failure). */
+  const ensureDetails = (row: CivitaiLora) => {
+    const known = details[row.versionId];
+    if (!known || (!known.loading && 'error' in known)) void fetchDetails(row);
+  };
+
+  return {
+    rows, cursor, state, details, ensureDetails,
+    retryDetails: (row: CivitaiLora) => fetchDetails(row),
+    retry: () => load(query.trim()),
+    loadMore: () => load(query.trim(), cursor)
+  };
+}
+
+/**
+ * One Civitai LoRA in the browser's detail panel: its pictures and how they
+ * were made, the maker's trigger words and usage tips, and `action` (Download,
+ * Add, In stack) under the name.
+ */
+export function CivitaiDetail({ row, state, action, onRetry }: {
   row: CivitaiLora;
   state: DetailsState | undefined;
   action: React.ReactNode;
-  onClose: () => void;
   onRetry: () => void;
 }) {
   const [index, setIndex] = useState(0);
@@ -60,27 +119,12 @@ function LoraCard({ row, state, action, onClose, onRetry }: {
     made && made.seed !== null ? { label: 'Seed', values: [String(made.seed)] } : null,
     made && made.clipSkip !== null ? { label: 'Clip skip', values: [String(made.clipSkip)] } : null
   ].filter((item): item is { label: string; values: string[]; tone?: 'strength' } => Boolean(item));
-  const subtitle = [row.creator, row.baseModel, row.version, row.downloads ? `${countLabel(row.downloads)} downloads` : ''].filter(Boolean).join(' · ');
-
-  /** Label on the left, its values as badges on the right; each badge copies its own value. */
-  const factRow = (label: string, values: string[], tone = '') => (
-    <div key={label} className="civitai-fact">
-      <dt>{label}</dt>
-      <dd>
-        {values.map((value) => (
-          <button key={value} type="button" className={cn('civitai-badge', tone && `is-${tone}`)} title={`Copy ${value}`} aria-label={`Copy ${label.toLowerCase()}: ${value}`} onClick={() => copy(value, `${label}:${value}`)}>
-            <span className="civitai-badge-text">{value}</span>
-            <CopyIcon copied={copied === `${label}:${value}`} size={11} />
-          </button>
-        ))}
-      </dd>
-    </div>
-  );
+  const subtitle = [row.creator, row.baseModel, row.version, sizeLabel(row.bytes), row.downloads ? `${countLabel(row.downloads)} downloads` : ''].filter(Boolean).join(' · ');
 
   return (
-    <section className="civitai-card" aria-label={`${row.name} on Civitai`}>
+    <section className="civitai-card is-detail" aria-label={`${row.name} on Civitai`}>
       <div className="civitai-card-media">
-        {image ? <SafeImg key={image.url} src={image.url} alt={made?.prompt ? `Made with this LoRA: ${made.prompt.slice(0, 120)}` : `A picture made with ${row.name}`} /> : null}
+        {image ? <SafeImg key={image.url} src={image.url} referrerPolicy="no-referrer" alt={made?.prompt ? `Made with this LoRA: ${made.prompt.slice(0, 120)}` : `A picture made with ${row.name}`} /> : null}
         {images.length > 1 ? (
           <>
             <button type="button" className="civitai-card-step is-prev" aria-label="Previous picture" onClick={() => step(-1)}><ChevronLeft size={16} /></button>
@@ -88,22 +132,16 @@ function LoraCard({ row, state, action, onClose, onRetry }: {
             <span className="civitai-card-count">{index + 1} / {images.length}</span>
           </>
         ) : null}
-        <button type="button" className="civitai-card-close" aria-label="Close details" onClick={onClose}><X size={14} /></button>
       </div>
 
-      <div className="civitai-card-head">
-        <div className="civitai-card-name">
-          <strong className="civitai-card-title" title={row.name}>{row.name}</strong>
-          {subtitle ? <span title={subtitle}>{subtitle}</span> : null}
-        </div>
-        {action}
-      </div>
+      <div className="wf-detail-head"><h3>{row.name}</h3></div>
+      {subtitle ? <p className="wf-detail-meta">{subtitle}</p> : null}
+      {action}
 
-      {/* Like Civitai's details: what it is on the left, its values on the right. */}
       {triggers.length || configuration.length ? (
         <dl className="civitai-card-facts">
-          {triggers.length ? factRow('Trigger words', triggers, 'trigger') : null}
-          {configuration.map((item) => factRow(item.label, item.values, item.tone))}
+          {triggers.length ? <FactRow label="Trigger words" values={triggers} tone="trigger" copied={copied} onCopy={copy} /> : null}
+          {configuration.map((item) => <FactRow key={item.label} label={item.label} values={item.values} tone={item.tone} copied={copied} onCopy={copy} />)}
         </dl>
       ) : null}
 
@@ -129,183 +167,19 @@ function LoraCard({ row, state, action, onClose, onRetry }: {
   );
 }
 
-/**
- * Civitai's LoRAs for the model in use, inside the Add LoRAs picker. Only
- * LoRAs made for the model's base show (the server asks Civitai for those);
- * a row opens its card above the list. Download puts one in ComfyUI's loras
- * folder through the same queue as every other model file, checked against
- * Civitai's SHA-256, and Add then adds it.
- */
-export function CivitaiLoras({ profile, options, current, remaining, onAdd, onLibraryChanged, onCardChange }: {
-  profile: Profile | null;
-  /** LoRAs on this computer, as ComfyUI lists them. */
-  options: string[];
-  current: string[];
-  remaining: number;
-  onAdd: (names: string[]) => void;
-  /** Ask ComfyUI for its LoRAs again (after a download lands). */
-  onLibraryChanged: () => void;
-  /** Whether a card is open, so the picker can give it room. */
-  onCardChange?: (open: boolean) => void;
-}) {
-  const [query, setQuery] = useState('');
-  const [rows, setRows] = useState<CivitaiLora[]>([]);
-  const [cursor, setCursor] = useState('');
-  const [state, setState] = useState<{ loading: boolean; error: string; unsupported: boolean; bases: string[]; site: string }>({ loading: true, error: '', unsupported: false, bases: [], site: '' });
-  const [failed, setFailed] = useState<Record<string, string>>({});
-  const [openId, setOpenId] = useState('');
-  const [details, setDetails] = useState<Record<number, DetailsState>>({});
-  const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
-  const request = useRef<AbortController | null>(null);
-  const canDownload = useThisComputer();
-  const family = profile?.family || '';
-  const model = profile?.model || '';
-
-  const downloads = useModelDownloads({ onDone: (item) => { if (item.id.startsWith('civitai:')) onLibraryChanged(); } });
-  const installed = useMemo(() => {
-    const byFile = new Map<string, string>();
-    for (const name of options) byFile.set(baseName(name).toLowerCase(), name);
-    return byFile;
-  }, [options]);
-  const openRow = rows.find((row) => row.id === openId) || null;
-  useEffect(() => { onCardChange?.(Boolean(openRow)); }, [onCardChange, openRow]);
-
-  const load = async (text: string, after = '') => {
-    request.current?.abort();
-    const controller = new AbortController();
-    request.current = controller;
-    setState((value) => ({ ...value, loading: true, error: '' }));
-    try {
-      const result = await searchCivitaiLoras({ query: text, family, model, cursor: after }, controller.signal);
-      if (controller.signal.aborted) return;
-      setRows((list) => (after ? [...list, ...result.rows.filter((row) => !list.some((item) => item.id === row.id))] : result.rows));
-      setCursor(result.nextCursor || '');
-      setState({ loading: false, error: '', unsupported: Boolean(result.unsupported), bases: result.bases || [], site: result.site || '' });
-    } catch (error) {
-      if (controller.signal.aborted || (error as Error)?.name === 'AbortError') return;
-      setState((value) => ({ ...value, loading: false, error: error instanceof Error ? error.message : 'Civitai couldn’t be reached.' }));
-    }
-  };
-
-  // Typing searches after a short pause; an empty box shows the most downloaded for this model.
-  useEffect(() => {
-    const timer = window.setTimeout(() => { void load(query.trim()); }, query ? 350 : 0);
-    return () => window.clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [query, family, model]);
-  useEffect(() => () => request.current?.abort(), []);
-  useEffect(() => { inputRef.current?.focus(); }, []);
-
-  const fetchDetails = async (row: CivitaiLora) => {
-    setDetails((value) => ({ ...value, [row.versionId]: { loading: true } }));
-    try {
-      const result = await loadLoraDetails(row.versionId);
-      setDetails((value) => ({ ...value, [row.versionId]: { loading: false, details: result } }));
-    } catch (error) {
-      setDetails((value) => ({ ...value, [row.versionId]: { loading: false, error: error instanceof Error ? error.message : 'Civitai couldn’t be reached.' } }));
-    }
-  };
-  // The card takes the list's place; closing it brings the list back where it was.
-  const listScroll = useRef(0);
-  const open = (row: CivitaiLora) => {
-    listScroll.current = listRef.current?.scrollTop || 0;
-    setOpenId(row.id);
-    const known = details[row.versionId];
-    if (!known || (!known.loading && 'error' in known)) void fetchDetails(row);
-  };
-  const close = () => setOpenId('');
-  useLayoutEffect(() => {
-    if (listRef.current) listRef.current.scrollTop = openId ? 0 : listScroll.current;
-  }, [openId]);
-
-  const download = async (row: CivitaiLora) => {
-    setFailed(({ [row.id]: _, ...rest }) => rest);
-    try {
-      await downloads.start(row.id);
-    } catch (error) {
-      setFailed((value) => ({ ...value, [row.id]: error instanceof Error ? error.message : 'The download didn’t start.' }));
-    }
-  };
-
-  const action = (row: CivitaiLora) => {
-    const local = installed.get(row.file.toLowerCase());
-    if (local) {
-      if (current.includes(local)) return <em>Added</em>;
-      return <button type="button" className="btn civitai-action" disabled={remaining <= 0} onClick={(event) => { event.stopPropagation(); onAdd([local]); }}><Plus size={13} /> Add</button>;
-    }
-    const progress = downloadFor(downloads.state, row.file);
-    if (progress && (progress.status === 'downloading' || progress.status === 'queued')) {
-      const percent = progress.totalBytes ? Math.min(99, Math.floor((progress.receivedBytes / progress.totalBytes) * 100)) : 0;
-      return <em className="civitai-progress"><Loader2 size={12} className="spin" /> {progress.verifying ? 'Checking' : progress.status === 'queued' ? 'Waiting' : `${percent}%`}</em>;
-    }
-    if (progress?.status === 'done') return <em className="civitai-progress"><Loader2 size={12} className="spin" /> Adding</em>;
-    if (!canDownload) return <em title="Downloads happen on the computer running HEISS UI, or a device it trusts with admin.">Owner only</em>;
-    if (progress?.status === 'error' || failed[row.id]) {
-      return <button type="button" className="btn civitai-action" onClick={(event) => { event.stopPropagation(); void download(row); }}><RotateCw size={13} /> Retry</button>;
-    }
-    return <button type="button" className="btn civitai-action" onClick={(event) => { event.stopPropagation(); void download(row); }} title={row.file}><Download size={13} /> {sizeLabel(row.bytes) || 'Get'}</button>;
-  };
-
-  const errorOf = (row: CivitaiLora) => failed[row.id] || (downloadFor(downloads.state, row.file)?.status === 'error' ? downloadFor(downloads.state, row.file)?.error : '');
-
+/** Label on the left, its values as badges on the right; each badge copies its own value. */
+export function FactRow({ label, values, tone = '', copied, onCopy }: { label: string; values: string[]; tone?: string; copied: string | null; onCopy: (value: string, key: string) => void }) {
   return (
-    <>
-      <label className="lora-picker-search">
-        <Search size={14} />
-        <input
-          ref={inputRef}
-          className="is-framed"
-          value={query}
-          placeholder={state.bases.length ? `Search Civitai for ${state.bases[0]} LoRAs` : 'Search Civitai'}
-          aria-label="Search Civitai LoRAs"
-          onChange={(event) => setQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key !== 'Escape') return;
-            if (openId) { event.preventDefault(); event.stopPropagation(); close(); return; }
-            if (query) { event.preventDefault(); event.stopPropagation(); setQuery(''); }
-          }}
-        />
-        {query ? <button type="button" aria-label="Clear search" onClick={() => { setQuery(''); inputRef.current?.focus(); }}><X size={13} /></button> : null}
-      </label>
-      <div className="lora-picker-list civitai-list" ref={listRef} role="list" aria-busy={state.loading}>
-        {openRow ? <LoraCard row={openRow} state={details[openRow.versionId]} action={action(openRow)} onClose={close} onRetry={() => fetchDetails(openRow)} /> : null}
-        {openRow ? null : state.unsupported ? (
-          <div className="lora-empty"><p>Civitai has no LoRA category for this model, so nothing here would be sure to fit.</p></div>
-        ) : null}
-        {!openRow && state.error ? (
-          <div className="lora-empty is-unavailable"><AlertTriangle size={16} /><p>{state.error}</p><button type="button" className="btn" onClick={() => load(query.trim())}><RotateCw size={13} /> Try again</button></div>
-        ) : null}
-        {!openRow && !state.unsupported && !state.error ? (
-          <div className="lora-picker-section">
-            {rows.map((row) => {
-              const error = errorOf(row);
-              return (
-                <div
-                  key={row.id}
-                  className="lora-option civitai-row"
-                  role="listitem"
-                  tabIndex={0}
-                  aria-label={`${row.name}, show details`}
-                  onClick={() => open(row)}
-                  onKeyDown={(event) => { if (event.target === event.currentTarget && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); open(row); } }}
-                >
-                  <span className="civitai-thumb" aria-hidden="true"><SafeImg src={row.preview} alt="" loading="lazy" referrerPolicy="no-referrer" /></span>
-                  <span className="lora-option-copy">
-                    <strong title={row.name}>{row.name}</strong>
-                    <span>{row.creator || row.version}</span>
-                    {error ? <span className="civitai-error">{error}</span> : null}
-                  </span>
-                  {action(row)}
-                </div>
-              );
-            })}
-            {!rows.length && !state.loading ? <div className="lora-empty"><p>{query.trim() ? `No LoRAs on Civitai match “${query.trim()}” for this model.` : 'Civitai has no LoRAs for this model yet.'}</p></div> : null}
-            {state.loading ? <div className="civitai-loading"><Loader2 size={14} className="spin" /> Asking Civitai…</div> : null}
-            {cursor && !state.loading ? <button type="button" className="btn is-ghost civitai-more" onClick={() => load(query.trim(), cursor)}>Show more</button> : null}
-          </div>
-        ) : null}
-      </div>
-    </>
+    <div className="civitai-fact">
+      <dt>{label}</dt>
+      <dd>
+        {values.map((value) => (
+          <button key={value} type="button" className={cn('civitai-badge', tone && `is-${tone}`)} title={`Copy ${value}`} aria-label={`Copy ${label.toLowerCase()}: ${value}`} onClick={() => onCopy(value, `${label}:${value}`)}>
+            <span className="civitai-badge-text">{value}</span>
+            <CopyIcon copied={copied === `${label}:${value}`} size={11} />
+          </button>
+        ))}
+      </dd>
+    </div>
   );
 }
