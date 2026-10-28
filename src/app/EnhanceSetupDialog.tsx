@@ -8,7 +8,7 @@ import { CellBar, Watcher } from './UpscaleDialogs';
 import { useThisComputer } from './device';
 import { cn } from './format';
 import { loadHeissNodes, useHeissNodes } from './heissNodes';
-import { closeEnhanceSetup, loadEnhanceStatus, saveEnhanceSettings, useEnhance, type EnhanceChoice, type EnhanceStatus } from './promptEnhance';
+import { closeEnhanceSetup, loadEnhanceStatus, saveEnhanceSettings, testEnhanceModel, useEnhance, type EnhanceChoice, type EnhanceStatus } from './promptEnhance';
 import { downloadFor, useModelDownloads } from './useModelDownloads';
 import { formatBytes } from './useUpscale';
 import type { ShowToast } from './toast';
@@ -99,8 +99,13 @@ function ModelChoice({ choice, picked, recommended, inUse, onPick, disabled }: {
       <button type="button" role="radio" aria-checked={picked} onClick={onPick} disabled={disabled}>
         <i aria-hidden="true">{picked ? <Check size={10} strokeWidth={3} /> : null}</i>
         <div>
-          <strong>{choice.label}{inUse ? <em>In use</em> : recommended ? <em>Recommended</em> : null}</strong>
-          <span>{choice.note}</span>
+          <strong>
+            {choice.label}
+            {inUse ? <em>In use</em> : recommended && !choice.local ? <em>Recommended</em> : null}
+            {choice.local ? <em className="is-local">Your file</em> : null}
+            {choice.vision === false ? <em className="is-words">Words only</em> : null}
+          </strong>
+          <span>{choice.local && choice.fileName ? `${choice.fileName} · ` : ''}{choice.note}</span>
         </div>
         <small>{choice.onDisk || choice.listed ? 'Downloaded' : formatBytes(choice.bytes)}</small>
       </button>
@@ -139,10 +144,16 @@ export function EnhanceSetupDialog({ showToast }: { showToast: ShowToast }) {
     return () => window.clearInterval(timer);
   }, [open, stage]);
 
-  // A model already on this computer: just use it from now on.
+  // A model already on this computer: use it from now on. The person's own file
+  // writes a few words first, so one the node can't run never becomes the enhancer.
+  const [testing, setTesting] = useState('');
   const useChosen = async () => {
-    if (!chosen) return;
+    if (!chosen || testing) return;
     try {
+      if (chosen.local) {
+        setTesting(chosen.file);
+        try { await testEnhanceModel(chosen.file); } finally { setTesting(''); }
+      }
       await saveEnhanceSettings({ model: chosen.file });
       await loadEnhanceStatus({ fresh: true });
       showToast(`Prompt enhance now writes with ${chosen.label}`, 'success');
@@ -211,7 +222,7 @@ export function EnhanceSetupDialog({ showToast }: { showToast: ShowToast }) {
           : chosen && chosen.file === inUse
             ? <button className="btn is-primary" disabled>In use</button>
             : chosen && (chosen.onDisk || chosen.listed)
-              ? <button className="btn is-primary" onClick={inUse ? useChosen : download}>Use it</button>
+              ? <button className="btn is-primary" onClick={useChosen} disabled={Boolean(testing)}>{testing ? 'Testing…' : 'Use it'}</button>
               : <button className="btn is-primary" onClick={download} disabled={!chosen}>{`Download ${formatBytes(chosen?.bytes)}`}</button>}
       </>
     );

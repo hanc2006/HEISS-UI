@@ -149,6 +149,8 @@ function EnhanceSettingsDrawer({ prefs, setPrefs }: { prefs: Preferences; setPre
   const level = creativityLevels.reduce((best, item) => Math.abs(item.amount - (settings?.creativity ?? 0.7)) < Math.abs(best.amount - (settings?.creativity ?? 0.7)) ? item : best, creativityLevels[1]);
   const save = (patch: Parameters<typeof saveEnhanceSettings>[0]) => { saveEnhanceSettings(patch).catch(() => null); };
   const model = listed.find((choice) => choice.file === status?.model);
+  // The quick switch holds the catalog's models; the person's own files go through the chooser, which tests them first.
+  const switchable = listed.filter((choice) => !choice.local || choice.file === status?.model);
   return (
     <SettingsDrawer id="set-feature-enhance" title="Prompt enhance" description={!on ? 'Off' : status?.ready ? `On · ${model?.label || 'ready'}` : 'On · needs setting up'}>
       <SwitchRow
@@ -166,13 +168,13 @@ function EnhanceSettingsDrawer({ prefs, setPrefs }: { prefs: Preferences; setPre
       {on && status?.ready ? (
         <>
           <Row label="Model" description={model?.note || 'The model that writes.'}>
-            {listed.length > 1 && admin
-              ? <Segmented label="Model" value={status.model} onChange={(next) => save({ model: next })} options={listed.map((choice) => ({ value: choice.file, label: choice.label }))} />
+            {switchable.length > 1 && admin
+              ? <Segmented label="Model" value={status.model} onChange={(next) => save({ model: next })} options={switchable.map((choice) => ({ value: choice.file, label: choice.label }))} />
               : <span className="set-value">{model?.label || status.model}</span>}
           </Row>
-          {admin && listed.length < (status.choices || []).length ? (
-            <Row label="Other models" description="Another writer to switch to: faster, or richer.">
-              <button type="button" className="btn" onClick={() => openEnhanceSetup({ choose: true })}>Get one</button>
+          {admin && switchable.length < (status.choices || []).length ? (
+            <Row label="Other models" description={listed.some((choice) => choice.local) ? 'Another writer: one of your own files, or a download.' : 'Another writer to switch to: faster, or richer.'}>
+              <button type="button" className="btn" onClick={() => openEnhanceSetup({ choose: true })}>{listed.some((choice) => choice.local) ? 'Choose' : 'Get one'}</button>
             </Row>
           ) : null}
           <Row label="Style" description={level.value === 'faithful' ? 'Sticks closely to your words; adds only what fills the picture in.' : level.value === 'bold' ? 'Takes more creative liberties with light, framing and detail.' : 'Rich detail that stays true to what you asked for.'}>

@@ -12,7 +12,8 @@ import type { HeissNodesState } from './heissNodes';
 
 export type EnhanceTarget = 'image' | 'tags' | 'describe' | 'tags-describe' | 'edit' | 'video' | 'motion';
 
-export type EnhanceChoice = { id: string; file: string; label: string; note: string; bytes: number; listed: boolean; onDisk: boolean };
+/** `local`: the person's own file (server/enhance-models.js); `vision`: it can turn a picture into a prompt. */
+export type EnhanceChoice = { id: string; file: string; label: string; note: string; bytes: number; listed: boolean; onDisk: boolean; local?: boolean; vision?: boolean; fileName?: string };
 export type EnhanceSettings = { model: string; instructions: string; creativity: number };
 export type EnhanceStatus = {
   ready: boolean;
@@ -56,6 +57,11 @@ export async function requireEnhance(then?: () => void) {
   }
   set({ setup: { then } });
   return false;
+}
+
+/** A short real run with a listed model, before it becomes the enhancer. Throws with the reason when it doesn't write. */
+export async function testEnhanceModel(model: string) {
+  return apiJson<{ ok: boolean; text: string; seconds: number }>('/api/enhance/test', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ model }) });
 }
 
 export function openEnhanceSetup({ choose = false }: { choose?: boolean } = {}) {

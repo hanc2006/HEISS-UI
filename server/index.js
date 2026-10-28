@@ -65,7 +65,8 @@ import { applyLoraOps, clearLoraState, loadLoraLibrary, loadLoraStack, saveLoraL
 import { inpaintInputNames, prepareInpaint } from './inpaint.js';
 import { bytesForReference, deleteUploadedReference, listReferenceAssets, readMultipartImage, readUploadedReference, referenceAssetFromGallery, resolveReferenceAssets, saveUploadedReference, stageReferenceAssets, uploadBufferToComfy } from './reference-assets.js';
 import { prepareInputImage } from './input-image-sizing.js';
-import { enhanceModel, enhancePlan, enhancerChoices, finishPrompt, loadEnhanceSettings, promptLength, runEnhance, saveEnhanceSettings } from './prompt-enhance.js';
+import { enhanceModel, enhancePlan, enhancerChoices, finishPrompt, friendlyFailure, loadEnhanceSettings, promptLength, runEnhance, saveEnhanceSettings } from './prompt-enhance.js';
+import { canSee, localEnhancers } from './enhance-models.js';
 import { expectEnhance, noteComfyGone, noteComfyWork, noteEnhanceRan, recordEnhanceRun } from './enhance-timing.js';
 import { nodePack, nodePacks } from './node-packs.js';
 import { beginComfyRestart, comfyRestartStartedAt, comfyRestarting, finishComfyRestart, lastComfyRestart, noteComfyRestart } from './comfy-restart.js';
@@ -2084,18 +2085,23 @@ setInterval(() => { heissNodesStatus().catch(() => null); }, 30 * 60_000).unref?
 async function enhanceStatus({ fresh = false } = {}) {
   const nodes = await heissNodesStatus({ fresh });
   const nodesReady = Boolean(nodes.features.find((feature) => feature.id === "enhance")?.ready);
-  let { info } = await loadComfyContext();
+  let { info, stats } = await loadComfyContext();
   const settings = loadEnhanceSettings();
-  const describe = () => enhancerChoices().map((choice) => ({
-    id: choice.id, file: choice.file, label: choice.label, note: choice.note, bytes: choice.bytes,
-    listed: optionsFor(info, "CLIPLoader", "clip_name").includes(choice.file),
-    onDisk: Boolean(existingCopy({ ...choice, folder: "text_encoders" }))
-  }));
+  const catalogFiles = enhancerChoices().map((choice) => choice.file);
+  const describe = () => [
+    ...enhancerChoices().map((choice) => ({
+      id: choice.id, file: choice.file, label: choice.label, note: choice.note, bytes: choice.bytes,
+      listed: optionsFor(info, "CLIPLoader", "clip_name").includes(choice.file),
+      onDisk: Boolean(existingCopy({ ...choice, folder: "text_encoders" })), vision: true
+    })),
+    // The person's own files the node can run (Qwen3-VL, Qwen3.5, Gemma 4), read from their weights.
+    ...localEnhancers(optionsFor(info, "CLIPLoader", "clip_name"), { catalogFiles, vramTotal: Number(stats?.devices?.[0]?.vram_total) || 0 })
+  ];
   let choices = describe();
   // Downloaded but not listed: ComfyUI keeps its list until a folder's modified time changes, which exFAT never does.
   if (nodesReady && !enhanceModel(info, settings) && choices.some((choice) => choice.onDisk && !choice.listed)) {
     await comfy("/heiss/models/rescan", { method: "POST", timeout: 10_000 }).catch(() => null);
-    ({ info } = await loadComfyContext({ force: true }));
+    ({ info, stats } = await loadComfyContext({ force: true }));
     choices = describe();
   }
   const model = enhanceModel(info, settings);
@@ -2107,6 +2113,36 @@ app.get("/api/enhance/status", async (req, res) => {
     res.json({ ok: true, ...await enhanceStatus({ fresh: req.query.fresh === "1" }) });
   } catch {
     res.status(503).json({ ok: false, offline: true, restarting: comfyRestarting(), error: "ComfyUI is offline. Start it, and prompt enhance is back." });
+  }
+});
+
+/**
+ * A short real run with one of the listed models, before it becomes the
+ * enhancer: the only sure way to know the node can run that file on this
+ * ComfyUI. A few words in, a few words out.
+ */
+app.post("/api/enhance/test", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  const file = String(req.body?.model || "");
+  let status;
+  try {
+    status = await enhanceStatus();
+  } catch {
+    res.status(503).json({ ok: false, offline: true, error: comfyDownMessage() });
+    return;
+  }
+  if (!status.nodes.ready) return res.status(409).json({ ok: false, reason: "setup", error: "Prompt enhance needs HEISS UI Nodes first." });
+  if (!status.choices.some((choice) => choice.file === file && choice.listed)) return res.status(400).json({ ok: false, error: "ComfyUI doesn’t list that model." });
+  const started = performance.now();
+  try {
+    const text = await runEnhance({
+      model: file, system: "Rewrite the idea as one short image prompt.", prompt: "a red apple on a table",
+      maxTokens: 32, temperature: 0, seed: 1
+    }, { signal: AbortSignal.timeout(240_000) });
+    if (!String(text || "").trim()) throw new Error("It ran, but wrote nothing.");
+    res.json({ ok: true, text: String(text).trim(), seconds: Math.round((performance.now() - started) / 100) / 10 });
+  } catch (error) {
+    res.status(422).json({ ok: false, error: `That model didn’t work with prompt enhance: ${friendlyFailure(error?.message || String(error))}` });
   }
 });
 
@@ -2136,6 +2172,11 @@ app.post("/api/enhance", async (req, res) => {
   }
   if (!status.ready) {
     res.status(409).json({ ok: false, reason: "setup", error: "Prompt enhance needs setting up first." });
+    return;
+  }
+  // A words-only model given a picture would fail inside ComfyUI; say why instead.
+  if (assetId && !canSee(status.model, enhancerChoices().map((choice) => choice.file))) {
+    res.status(409).json({ ok: false, reason: "no-vision", error: "The enhancer model in use reads words only. To turn a picture into a prompt, pick one that reads pictures in Settings › Features › Prompt enhance." });
     return;
   }
   const kind = body.kind === "video" ? "video" : "image";
