@@ -61,7 +61,7 @@ function Steps({ stage }: { stage: ModelFolderStage }) {
   );
 }
 
-function copyFor(stage: ModelFolderStage, folders: StrayModelFolder[], added: ModelFolders['added'], saved = false, comfyRestarting = false): { title: string; description: string } {
+function copyFor(stage: ModelFolderStage, folders: StrayModelFolder[], added: ModelFolders['added'], saved = false, comfyRestarting = false, remoteCount = 0): { title: string; description: string } {
   const count = folders.reduce((sum, folder) => sum + folder.count, 0);
   switch (stage) {
     case 'scanning': return { title: 'Searching for models', description: 'Checking your folders, other ComfyUI installs and connected drives.' };
@@ -74,7 +74,9 @@ function copyFor(stage: ModelFolderStage, folders: StrayModelFolder[], added: Mo
         : `They’re in ${plural(folders.length, 'folder')} ComfyUI doesn’t fully read.`
     };
     case 'none': return { title: 'No models found outside ComfyUI', description: 'If models are somewhere else, choose the folder.' };
-    case 'remote': return { title: 'ComfyUI runs on another computer', description: 'Only folders on the computer running HEISS UI can be searched.' };
+    case 'remote': return remoteCount
+      ? { title: `ComfyUI reads ${plural(remoteCount, 'model')}`, description: 'It runs on another computer, so these come from its own model folders there.' }
+      : { title: 'ComfyUI runs on another computer', description: 'Only folders on the computer running HEISS UI can be searched.' };
     case 'offline': return comfyRestarting
       ? { title: 'ComfyUI is restarting', description: 'The search continues when it’s back, usually in a few seconds.' }
       : { title: 'Waiting for ComfyUI', description: 'Start ComfyUI to continue.' };
@@ -132,7 +134,8 @@ export function ModelFoldersDialog({ folders: state, runningCount = 0 }: { folde
   const chosenCount = chosen.reduce((sum, folder) => sum + folder.count, 0);
   const heroFiles = stage === 'found' ? chosenCount : added.count || chosenCount;
   const comfyRestarting = useComfyRestarting();
-  const { title, description } = copyFor(stage, folders, added, state.saved, comfyRestarting);
+  const remote = report?.remote;
+  const { title, description } = copyFor(stage, folders, added, state.saved, comfyRestarting, remote?.count || 0);
   const toggle = (path: string) => state.setSelected(selected.includes(path) ? selected.filter((item) => item !== path) : [...selected, path]);
   const later = <button className="btn is-ghost" onClick={state.close}>Not now</button>;
   const choose = <button className="btn" onClick={state.pick}><FolderOpen size={14} /> Choose a folder…</button>;
@@ -175,12 +178,26 @@ export function ModelFoldersDialog({ folders: state, runningCount = 0 }: { folde
     footer = <>{choose}<button className="btn is-primary" onClick={state.close}>Done</button></>;
   } else if (stage === 'remote') {
     body = (
-      <div className="upscale-callout">
-        <strong>Add the folder on that computer.</strong>
-        <span>In ComfyUI’s folder there, copy <code>extra_model_paths.yaml.example</code> to <code>extra_model_paths.yaml</code>, set <code>base_path</code> to your models folder, and restart ComfyUI.</span>
-      </div>
+      <>
+        {remote?.kinds.length ? (
+          <ul className="mf-linked mf-remote">
+            {remote.kinds.map((item) => (
+              <li key={item.kind} title={item.examples.join('\n')}>
+                <Check size={12} strokeWidth={3} />
+                <span>{kindLabel(item.kind, item.count)}</span>
+                {item.examples.length ? <code>{item.examples.join(', ')}{item.count > item.examples.length ? ', …' : ''}</code> : null}
+              </li>
+            ))}
+          </ul>
+        ) : null}
+        {remote?.dirs.length ? <p className="upscale-fine">From {remote.dirs.map((dir, index) => <React.Fragment key={dir}>{index ? ', ' : ''}<code>{dir}</code></React.Fragment>)} on that computer.</p> : null}
+        <div className="upscale-callout">
+          <strong>{remote?.count ? 'To add more, put them on that computer.' : 'Add the folder on that computer.'}</strong>
+          <span>Copy model files into ComfyUI’s model folders there, or list another folder in its <code>extra_model_paths.yaml</code> and restart ComfyUI. Then search again.</span>
+        </div>
+      </>
     );
-    footer = <button className="btn is-primary" onClick={state.close}>Done</button>;
+    footer = <><button className="btn" onClick={() => state.scan()}><RefreshCw size={13} /> Search again</button><button className="btn is-primary" onClick={state.close}>Done</button></>;
   } else if (stage === 'offline') {
     body = <Watcher>Waiting for ComfyUI…</Watcher>;
     footer = <>{later}<button className="btn" onClick={() => state.scan()}><RefreshCw size={13} /> Check again</button></>;

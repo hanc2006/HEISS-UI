@@ -128,6 +128,10 @@
 .mf-linked li:only-child { border-radius: var(--r-item); }
 .mf-linked svg { flex: none; color: #a9e2b8; }
 .mf-linked code { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* What a ComfyUI on another computer reads: kind first, a few file names after. */
+.mf-remote { max-height: 260px; overflow-y: auto; margin-bottom: 10px; }
+.mf-remote li > span { flex: none; color: hsl(var(--foreground)); }
+.mf-remote code { opacity: .75; text-align: right; }
 
 /* ------------------------------------------------------- Sidebar notice */
 
