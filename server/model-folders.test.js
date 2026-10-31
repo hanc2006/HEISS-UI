@@ -135,3 +135,44 @@ test("Windows paths are shown in full, not with ~", () => {
   assert.equal(tildePath("C:\\Users\\me\\AI", "C:\\Users\\me", "win32"), "C:\\Users\\me\\AI");
   assert.equal(tildePath("/Users/me/AI", "/Users/me", "darwin"), "~/AI");
 });
+
+test("a ComfyUI on another computer: the report says what it reads, from its own API", async () => {
+  const saved = globalThis.fetch;
+  // A RunPod-style ComfyUI: Linux paths that don't exist here, models listed per kind.
+  const remotePaths = {
+    diffusion_models: [["/workspace/models/diffusion_models", "/workspace/models/unet"], [".safetensors"]],
+    loras: [["/workspace/models/loras"], [".safetensors"]],
+    vae: [["/workspace/models/vae"], [".safetensors"]],
+    unet_gguf: [["/workspace/models/unet"], [".gguf"]],
+    controlnet: [["/workspace/models/controlnet"], [".safetensors"]],
+    custom_nodes: [["/workspace/ComfyUI/custom_nodes"], []]
+  };
+  const remoteFiles = {
+    diffusion_models: ["z_image_turbo_bf16.safetensors", "h3/minimax_h3.safetensors"],
+    unet_gguf: ["h3/minimax_h3.safetensors", "flux.gguf"],
+    loras: ["a.safetensors", "b.safetensors", "c.safetensors", "d.safetensors"],
+    vae: ["ae.safetensors"],
+    controlnet: []
+  };
+  globalThis.fetch = async (url) => {
+    const pathname = decodeURIComponent(new URL(url).pathname);
+    const kind = pathname.startsWith("/models/") ? pathname.slice("/models/".length) : null;
+    const body = pathname === "/internal/folder_paths" ? remotePaths
+      : pathname === "/system_stats" ? { system: { argv: ["main.py", "--listen", "0.0.0.0"] } }
+      : kind ? remoteFiles[kind] ?? null : null;
+    return new Response(JSON.stringify(body), { status: body ? 200 : 404, headers: { "content-type": "application/json" } });
+  };
+  try {
+    const report = await modelFolderReport({ local: false });
+    assert.equal(report.local, false);
+    assert.deepEqual(report.folders, []);
+    // unet_gguf folds into diffusion_models, and a file listed under both counts once.
+    assert.deepEqual(report.remote.kinds.map(({ kind, count }) => [kind, count]), [["loras", 4], ["diffusion_models", 3], ["vae", 1]]);
+    assert.equal(report.remote.count, 8);
+    assert.deepEqual(report.remote.kinds.find((item) => item.kind === "diffusion_models").examples, ["z_image_turbo_bf16.safetensors", "minimax_h3.safetensors", "flux.gguf"]);
+    // The remote folders are shown as ComfyUI wrote them, not resolved on this computer.
+    assert.deepEqual(report.remote.dirs, ["/workspace/models"]);
+  } finally {
+    globalThis.fetch = saved;
+  }
+});

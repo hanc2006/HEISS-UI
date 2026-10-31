@@ -496,6 +496,8 @@ export type ModelFolderReport = {
   writable?: boolean;
   folders: StrayModelFolder[];
   linked: Array<{ path: string; label: string; read: boolean }>;
+  /** ComfyUI on another computer: what it already reads, from its own API. */
+  remote?: { count: number; kinds: Array<{ kind: string; count: number; examples: string[] }>; dirs: string[] };
   scannedAt?: number;
   error?: string;
 };

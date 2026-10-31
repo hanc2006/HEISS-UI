@@ -164,8 +164,12 @@ export async function comfyModelSetup() {
   ]);
   if (!folders) return null;
   const kinds = {};
+  // As ComfyUI wrote them: a remote ComfyUI's paths mean nothing on this computer.
+  const reported = {};
   for (const [kind, value] of Object.entries(folders)) {
-    if (!skipKinds.has(kind)) kinds[kind] = flatten(value).map(realpath);
+    if (skipKinds.has(kind)) continue;
+    reported[kind] = flatten(value);
+    kinds[kind] = reported[kind].map(realpath);
   }
   const nodesDirs = flatten(folders.custom_nodes);
   const argv = Array.isArray(stats?.system?.argv) ? stats.system.argv : [];
@@ -180,7 +184,32 @@ export async function comfyModelSetup() {
   const rootConfig = root ? path.join(root, "extra_model_paths.yaml") : "";
   // Prefer a file ComfyUI was pointed at (the Desktop app's own), then its folder's, if we may write there.
   const configPath = [...configs, rootConfig].find((file) => file && canWrite(file)) || configs[0] || rootConfig;
-  return { kinds, root, configPath, reachable: Boolean(root || configs.length) };
+  return { kinds, reported, root, configPath, reachable: Boolean(root || configs.length) };
+}
+
+/**
+ * What a ComfyUI on another computer already reads, asked over its own API
+ * (GET /models/{kind}), since its disks can't be searched from here. Derived
+ * kinds (unet_gguf, ...) fold into their core kind, so a file counts once.
+ */
+export async function remoteModelSummary(setup) {
+  const byKind = new Map();
+  await Promise.all(Object.keys(setup.kinds).map(async (kind) => {
+    const files = await comfy(`/models/${encodeURIComponent(kind)}`).catch(() => null);
+    if (!Array.isArray(files) || !files.length) return;
+    const core = legacy[kind] || kind;
+    const set = byKind.get(core) || new Set();
+    for (const file of files) if (typeof file === "string") set.add(file);
+    byKind.set(core, set);
+  }));
+  const kinds = [...byKind]
+    .map(([kind, files]) => ({ kind, count: files.size, examples: [...files].slice(0, 3).map((file) => file.split(/[\\/]/).pop()) }))
+    .filter((item) => item.count)
+    .sort((a, b) => b.count - a.count || a.kind.localeCompare(b.kind));
+  // The folders the kinds live in, e.g. /workspace/models for /workspace/models/loras.
+  const parent = (dir) => dir.replace(/[\\/]+$/, "").replace(/[\\/][^\\/]*$/, "") || dir;
+  const dirs = [...new Set(Object.values(setup.reported || {}).flat().map(parent))].sort();
+  return { count: kinds.reduce((sum, item) => sum + item.count, 0), kinds, dirs };
 }
 
 /**
@@ -411,7 +440,8 @@ export async function modelFolderReport({ local = true, scan = {} } = {}) {
   const setup = await comfyModelSetup();
   if (!setup) return { ok: false, offline: true, folders: [], linked: [] };
   if (!local || !setup.reachable) {
-    return { ok: true, local: false, folders: [], linked: [], configPath: setup.configPath };
+    const remote = await remoteModelSummary(setup).catch(() => null);
+    return { ok: true, local: false, folders: [], linked: [], configPath: setup.configPath, ...(remote ? { remote } : {}) };
   }
   const knownKinds = Object.keys(setup.kinds);
   // Keyed without case on Windows: the yaml may say d:\ai\models for D:\AI\Models.
