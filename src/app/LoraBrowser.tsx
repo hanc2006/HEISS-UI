@@ -1,16 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Check, Download, Heart, Layers, Loader2, Plus, RotateCw, Search, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Check, Download, ExternalLink, Heart, Layers, Loader2, Plus, RotateCw, Search, X } from 'lucide-react';
 import { Modal } from './Modal';
 import { Segmented } from './SettingsControls';
 import { cn } from './format';
 import { useThisComputer } from './device';
 import { rankedLoras, type FitOf } from './loras';
-import { findLoraOnCivitai, loadCivitaiStatus, type CivitaiLora, type CivitaiRef } from './civitai';
-import { LoraDetail, civitaiByline, sizeLabel, useCivitaiLoras } from './CivitaiLoras';
+import { findLoraOnCivitai, loadCivitaiStatus, loadLoraScan, startLoraScan, type CivitaiLora, type CivitaiLoraDetails, type CivitaiRef, type LoraScanState } from './civitai';
+import { LoraDetail, sizeLabel, useCivitaiLoras } from './CivitaiLoras';
+import { SplitButton, type SplitMenuItem } from './SplitButton';
 import { LoraThumb, loraPreviewUrl } from './LoraThumb';
 import { downloadFor, useModelDownloads } from './useModelDownloads';
 import { scrollSideways, useWheelRef } from './wheel';
-import type { LoraInfo } from './useLoraInfo';
+import { refreshLoraInfo, type LoraInfo } from './useLoraInfo';
 import type { Profile } from './types';
 
 export type LoraSource = 'local' | 'civitai';
@@ -30,8 +31,9 @@ const baseName = (name: string) => name.split(/[\\/]/).pop() || name;
 /**
  * The LoRA browser: the one place LoRAs are chosen, laid out like the workflow
  * gallery. Cards on the left (this computer's LoRAs, or Civitai's for this
- * model), the selected one's details on the right with one button that says
- * what it will do: Add to stack, Download and add, or In stack (with Remove).
+ * model), the selected one's details on the right as a picture card with a
+ * split button: Download, Use Model or In use, with Remove and Visit Civitai
+ * behind its chevron.
  * It stays open after adding, so several go in one after another; the sidebar
  * then tunes them (on/off, strength, order).
  */
@@ -66,8 +68,6 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
   const [mobileDetailsOpen, setMobileDetailsOpen] = useState(Boolean(focus));
   const [mature, setMature] = useState(false);
   const [failed, setFailed] = useState<Record<string, string>>({});
-  // Civitai files to add to the stack as soon as their download lands.
-  const [addWhenReady, setAddWhenReady] = useState<string[]>([]);
   const filtersWheelRef = useWheelRef<HTMLDivElement>(scrollSideways);
   const canDownload = useThisComputer();
   const family = profile?.familyName || familyLabel || profile?.family || '';
@@ -83,9 +83,7 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
   const available = useMemo(() => new Set(options), [options]);
   const counts = {
     all: options.length,
-    stack: current.filter((name) => available.has(name)).length,
-    favorites: favorites.filter((name) => available.has(name)).length,
-    recent: recents.filter((name) => available.has(name)).length
+    stack: current.filter((name) => available.has(name)).length
   };
   const localItems = useMemo(() => {
     const ranked = rankedLoras(options, profile, query, fitOf);
@@ -96,6 +94,24 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
   }, [available, current, favorites, filter, fitOf, options, profile, query, recents]);
   const localSelected = localItems.includes(selected) ? selected : localItems[0] || '';
 
+  // Every LoRA here without a .civitai.json is matched with Civitai in the background
+  // (server/lora-previews.js); cards pick up their Civitai names as it goes.
+  const [scan, setScan] = useState<LoraScanState | null>(null);
+  useEffect(() => {
+    if (!open || !canDownload || !options.length) return;
+    let live = true;
+    let timer = 0;
+    let seen = -1;
+    const poll = (state: LoraScanState) => {
+      if (!live) return;
+      setScan(state);
+      if (state.matched !== seen) { if (seen >= 0) refreshLoraInfo(); seen = state.matched; }
+      if (state.running) timer = window.setTimeout(() => { loadLoraScan().then(poll).catch(() => {}); }, 1500);
+    };
+    startLoraScan().then(poll).catch(() => {});
+    return () => { live = false; window.clearTimeout(timer); };
+  }, [open, canDownload, options.length]);
+
   /* --------------------------------------------------------------- Civitai */
   const civitai = useCivitaiLoras({ enabled: open && source === 'civitai', query: civitaiQuery, profile });
   const installed = useMemo(() => {
@@ -103,43 +119,29 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
     for (const name of options) byFile.set(baseName(name).toLowerCase(), name);
     return byFile;
   }, [options]);
-  const downloads = useModelDownloads({ onDone: (item) => { if (item.id.startsWith('civitai:')) onLibraryChanged(); } });
+  const downloads = useModelDownloads({ onDone: (item) => { if (item.id.startsWith('civitai:')) { onLibraryChanged(); window.setTimeout(refreshLoraInfo, 1500); } } });
   const civitaiRow = civitai.rows.find((row) => row.id === civitaiSelected) || civitai.rows[0] || null;
   useEffect(() => { if (source === 'civitai' && civitaiRow) civitai.ensureDetails(civitaiRow.versionId); }, [source, civitaiRow?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // A LoRA on this computer: which Civitai LoRA it is (its sidecar, or its SHA-256 asked of Civitai), then Civitai's details.
-  const [refs, setRefs] = useState<Record<string, 'loading' | 'none' | 'error' | CivitaiRef>>({});
+  // A LoRA on this computer: which Civitai LoRA it is and what Civitai says, from its .civitai.json
+  // (or found by its SHA-256 and kept there by the server).
+  type Lookup = { state: 'loading' } | { state: 'none' } | { state: 'error'; error: string } | { state: 'found'; ref: CivitaiRef; details: CivitaiLoraDetails | null };
+  const [lookups, setLookups] = useState<Record<string, Lookup>>({});
   useEffect(() => {
-    if (!open || source !== 'local' || !localSelected || refs[localSelected] || !/\.safetensors$/i.test(localSelected)) return;
+    if (!open || source !== 'local' || !localSelected || lookups[localSelected] || !/\.safetensors$/i.test(localSelected)) return;
     const name = localSelected;
-    setRefs((value) => ({ ...value, [name]: 'loading' }));
+    setLookups((value) => ({ ...value, [name]: { state: 'loading' } }));
     findLoraOnCivitai(name)
-      .then((answer) => setRefs((value) => ({ ...value, [name]: answer.found && answer.ref ? answer.ref : 'none' })))
-      .catch(() => setRefs((value) => ({ ...value, [name]: 'error' })));
-  }, [open, source, localSelected, refs]);
-  const localRef = refs[localSelected];
-  useEffect(() => { if (localRef && typeof localRef === 'object') civitai.ensureDetails(localRef.versionId); }, [localRef]); // eslint-disable-line react-hooks/exhaustive-deps
+      .then((answer) => setLookups((value) => ({ ...value, [name]: answer.found && answer.ref ? { state: 'found', ref: answer.ref, details: answer.details || null } : { state: 'none' } })))
+      .catch((error) => setLookups((value) => ({ ...value, [name]: { state: 'error', error: error instanceof Error ? error.message : 'Civitai couldn’t be asked.' } })));
+  }, [open, source, localSelected, lookups]);
+  const retryLookup = (name: string) => setLookups(({ [name]: _, ...rest }) => rest);
 
-  // A download asked to be added: add it once ComfyUI lists it, if the stack still has room.
-  useEffect(() => {
-    if (!addWhenReady.length) return;
-    const landed = addWhenReady.filter((file) => installed.has(file.toLowerCase()));
-    if (!landed.length) return;
-    let room = cap - current.length;
-    for (const file of landed) {
-      const name = installed.get(file.toLowerCase())!;
-      if (room > 0 && !current.includes(name)) { onAdd(name); room -= 1; }
-    }
-    setAddWhenReady((list) => list.filter((file) => !landed.includes(file)));
-  }, [addWhenReady, cap, current, installed, onAdd]);
-
-  const download = async (row: CivitaiLora, thenAdd: boolean) => {
+  const download = async (row: CivitaiLora) => {
     setFailed(({ [row.id]: _, ...rest }) => rest);
-    if (thenAdd) setAddWhenReady((list) => (list.includes(row.file) ? list : [...list, row.file]));
     try {
       await downloads.start(row.id);
     } catch (error) {
-      setAddWhenReady((list) => list.filter((file) => file !== row.file));
       setFailed((value) => ({ ...value, [row.id]: error instanceof Error ? error.message : 'The download didn’t start.' }));
     }
   };
@@ -150,52 +152,40 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
       const percent = progress.totalBytes ? Math.min(99, Math.floor((progress.receivedBytes / progress.totalBytes) * 100)) : 0;
       return progress.verifying ? 'Checking' : progress.status === 'queued' ? 'Waiting' : `${percent}%`;
     }
-    return progress.status === 'done' ? 'Adding' : null;
+    return progress.status === 'done' ? 'Finishing' : null;
   };
   const errorOf = (row: CivitaiLora) => failed[row.id] || (downloadFor(downloads.state, row.file)?.status === 'error' ? downloadFor(downloads.state, row.file)?.error || '' : '');
 
   /* ---------------------------------------------------------------- Actions */
   const fullNote = <p className="lb-note">This workflow takes {cap}. Remove one from the stack first.</p>;
 
-  /** The one button for a LoRA on this computer: Add, or In stack with Remove beside it. */
-  const localAction = (name: string) => {
-    if (current.includes(name)) {
-      return (
-        <div className="wf-detail-actions">
-          <button type="button" className="btn is-primary" disabled><Check size={15} /> In stack</button>
-          <button type="button" className="btn is-ghost" onClick={() => onRemove(name)}>Remove</button>
-        </div>
-      );
+  /**
+   * The split button: its main half does the next thing (Download, Use Model,
+   * or says In use); Remove (from the stack) and Visit Civitai sit behind the chevron.
+   */
+  const actionFor = ({ local, row, page }: { local: string; row?: CivitaiLora; page: string }) => {
+    const inStack = Boolean(local && current.includes(local));
+    const items: SplitMenuItem[] = [
+      { label: 'Remove', icon: <X size={14} />, disabled: !inStack, danger: true, onSelect: () => onRemove(local) },
+      { label: 'Visit Civitai', icon: <ExternalLink size={14} />, href: page, disabled: !page }
+    ];
+    if (local) {
+      return inStack
+        ? <SplitButton label="In use" icon={<Check size={15} />} disabled items={items} />
+        : <SplitButton label="Use Model" icon={<Plus size={15} />} disabled={full} title={full ? `This workflow takes ${cap}` : undefined} onClick={() => onAdd(local)} items={items} />;
     }
+    const progress = row ? progressOf(row) : null;
+    if (progress) return <SplitButton label={progress === 'Finishing' ? 'Finishing' : `Downloading ${progress}`} icon={<Loader2 size={14} className="spin" />} busy items={items} />;
+    const error = row ? errorOf(row) : '';
     return (
-      <>
-        <div className="wf-detail-actions">
-          <button type="button" className="btn is-primary" disabled={full} onClick={() => onAdd(name)}><Plus size={15} /> Add to stack</button>
-        </div>
-        {full ? fullNote : null}
-      </>
-    );
-  };
-
-  /** The one button for a Civitai LoRA: Download and add, its progress, or the local LoRA's own button once it is here. */
-  const civitaiAction = (row: CivitaiLora) => {
-    const local = installed.get(row.file.toLowerCase());
-    if (local) return localAction(local);
-    const progress = progressOf(row);
-    const error = errorOf(row);
-    if (progress) {
-      return <div className="wf-detail-actions"><button type="button" className="btn is-primary" disabled><Loader2 size={14} className="spin" /> {progress === 'Adding' ? 'Adding' : `Downloading ${progress}`}</button></div>;
-    }
-    if (!canDownload) return <p className="lb-note">Downloads happen on the computer running HEISS UI, or a device it trusts with admin.</p>;
-    return (
-      <>
-        <div className="wf-detail-actions">
-          <button type="button" className="btn is-primary" title={row.file} onClick={() => void download(row, !full)}>
-            {error ? <><RotateCw size={14} /> Try again</> : <><Download size={14} /> {full ? 'Download' : 'Download and add'}{row.bytes ? ` · ${sizeLabel(row.bytes)}` : ''}</>}
-          </button>
-        </div>
-        {error ? <p className="lb-note is-error">{error}</p> : full ? fullNote : null}
-      </>
+      <SplitButton
+        label={error ? 'Try again' : 'Download'}
+        icon={error ? <RotateCw size={14} /> : <Download size={15} />}
+        disabled={!canDownload || !row}
+        title={!canDownload ? 'Downloads happen on the computer running HEISS UI, or a device it trusts with admin.' : row?.file}
+        onClick={() => row && void download(row)}
+        items={items}
+      />
     );
   };
 
@@ -218,6 +208,7 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
 
   const localCard = (name: string) => {
     const info = infos[name];
+    const lookup = lookups[name];
     const model = info?.base || info?.civitaiBase || '';
     return (
       <button
@@ -229,8 +220,8 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
         onDoubleClick={() => { if (!current.includes(name) && !full) onAdd(name); }}
       >
         <span className="wf-thumb"><LoraThumb src={loraPreviewUrl(name, info)} label={model || 'LoRA'} plain /></span>
-        {current.includes(name) ? <span className="wf-current">In stack</span> : null}
-        {cardCopy(info?.title || (typeof refs[name] === 'object' ? (refs[name] as CivitaiRef).name : '') || loraFileName(name), model, info?.bytes, fitOf(name) === 'other' && Boolean(info?.base), favorites.includes(name), name)}
+        {current.includes(name) ? <span className="wf-current">In use</span> : null}
+        {cardCopy(info?.title || (lookup?.state === 'found' ? lookup.ref.name : '') || loraFileName(name), model, info?.bytes, fitOf(name) === 'other' && Boolean(info?.base), favorites.includes(name), name)}
       </button>
     );
   };
@@ -247,7 +238,7 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
         onClick={() => select(row.id)}
       >
         <span className="wf-thumb"><LoraThumb src={row.preview} label={row.baseModel} plain /></span>
-        {local && current.includes(local) ? <span className="wf-current">In stack</span> : local ? <span className="wf-current is-quiet">Downloaded</span> : progress ? <span className="wf-current is-quiet"><Loader2 size={10} className="spin" /> {progress}</span> : null}
+        {local && current.includes(local) ? <span className="wf-current">In use</span> : local ? <span className="wf-current is-quiet">Downloaded</span> : progress ? <span className="wf-current is-quiet"><Loader2 size={10} className="spin" /> {progress}</span> : null}
         {cardCopy(row.name, row.baseModel, row.bytes, false, Boolean(local && favorites.includes(local)), row.name)}
       </button>
     );
@@ -255,33 +246,32 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
 
   const localDetail = (name: string) => {
     const info = infos[name];
-    const ref = refs[name];
-    const found = ref && typeof ref === 'object' ? ref : null;
-    const model = info?.base || found?.baseModel || info?.civitaiBase || '';
-    const title = found?.name || info?.title || loraFileName(name);
+    const lookup = lookups[name];
+    const found = lookup?.state === 'found' ? lookup : null;
+    const model = info?.base || found?.ref.baseModel || info?.civitaiBase || '';
     const other = fitOf(name) === 'other' && Boolean(info?.base);
-    const lookup = ref === 'loading' ? <p className="lb-note"><Loader2 size={12} className="spin" /> Looking it up on Civitai…</p>
-      : ref === 'none' ? <p className="lb-note">Civitai doesn’t know this file, so only what the file itself says is shown.</p>
-      : ref === 'error' ? <p className="lb-note">Civitai couldn’t be asked about this file. <button type="button" className="civitai-card-link" onClick={() => setRefs(({ [name]: _, ...rest }) => rest)}>Try again</button></p>
-      : null;
+    const page = found?.details?.page || (found?.ref.modelId ? `https://civitai.com/models/${found.ref.modelId}?modelVersionId=${found.ref.versionId}` : '');
     return (
       <LoraDetail
         key={name}
         id={name}
-        name={title}
-        fileName={title !== loraFileName(name) ? baseName(name) : loraFolder(name)}
+        name={found?.ref.name || info?.title || loraFileName(name)}
         model={model}
         otherModel={other}
         size={info?.bytes}
-        version={found?.version}
         previews={[loraPreviewUrl(name, info)]}
-        state={found ? civitai.details[found.versionId] : undefined}
+        details={found?.details || null}
+        loading={!lookup || lookup.state === 'loading'}
+        error={lookup?.state === 'error' ? lookup.error : ''}
+        onRetry={() => retryLookup(name)}
         triggers={info?.triggers || []}
-        action={localAction(name)}
+        action={actionFor({ local: name, page })}
         favorite={{ on: favorites.includes(name), toggle: () => onToggleFavorite(name) }}
-        note={<>{other ? <p className="wf-issue">Made for {info?.base}, so it may not work with {family || 'this model'}.</p> : null}{lookup}</>}
-        page={found?.modelId ? `https://civitai.com/models/${found.modelId}?modelVersionId=${found.versionId}` : ''}
-        onRetry={found ? () => civitai.retryDetails(found.versionId) : undefined}
+        note={<>
+          {other ? <p className="wf-issue">Made for {info?.base}, so it may not work with {family || 'this model'}.</p> : null}
+          {lookup?.state === 'none' ? <p className="lb-note">Civitai doesn’t know this file, so only what the file itself says is shown.</p> : null}
+          {full && !current.includes(name) ? fullNote : null}
+        </>}
       />
     );
   };
@@ -320,6 +310,8 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
     );
   }
 
+  const civitaiDetails = civitaiRow ? civitai.details[civitaiRow.versionId] : undefined;
+  const civitaiLocal = civitaiRow ? installed.get(civitaiRow.file.toLowerCase()) || '' : '';
   const detail = source === 'local'
     ? (localSelected ? localDetail(localSelected) : empty(<Layers size={22} />, 'No LoRA selected', 'Choose one to see its details.'))
     : (civitaiRow ? (
@@ -329,14 +321,17 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
         name={civitaiRow.name}
         model={civitaiRow.baseModel}
         size={civitaiRow.bytes}
-        version={civitaiRow.version}
-        byline={civitaiByline(civitaiRow)}
         previews={[civitaiRow.preview]}
-        state={civitai.details[civitaiRow.versionId]}
-        action={civitaiAction(civitaiRow)}
-        favorite={installed.get(civitaiRow.file.toLowerCase()) ? { on: favorites.includes(installed.get(civitaiRow.file.toLowerCase())!), toggle: () => onToggleFavorite(installed.get(civitaiRow.file.toLowerCase())!) } : undefined}
-        page={civitaiRow.page}
+        details={civitaiDetails && !civitaiDetails.loading && 'details' in civitaiDetails ? civitaiDetails.details : null}
+        loading={!civitaiDetails || civitaiDetails.loading}
+        error={civitaiDetails && !civitaiDetails.loading && 'error' in civitaiDetails ? civitaiDetails.error : ''}
         onRetry={() => civitai.retryDetails(civitaiRow.versionId)}
+        action={actionFor({ local: civitaiLocal, row: civitaiRow, page: civitaiRow.page })}
+        favorite={civitaiLocal ? { on: favorites.includes(civitaiLocal), toggle: () => onToggleFavorite(civitaiLocal) } : undefined}
+        note={<>
+          {errorOf(civitaiRow) && !civitaiLocal ? <p className="lb-note is-error">{errorOf(civitaiRow)}</p> : null}
+          {full && civitaiLocal && !current.includes(civitaiLocal) ? fullNote : null}
+        </>}
       />
     ) : empty(<Layers size={22} />, 'No LoRA selected', 'Choose one to see its details.'));
 
@@ -373,9 +368,10 @@ export function LoraBrowser({ open, onClose, startOn, focus, familyLabel = '', o
         </div>
         {source === 'local' ? (
           <div ref={filtersWheelRef} className="wf-filters" role="radiogroup" aria-label="Filter LoRAs">
-            {([['all', `All ${counts.all}`], ['stack', `In stack ${counts.stack}`], ['favorites', 'Favorites'], ['recent', 'Recent']] as Array<[LocalFilter, string]>).map(([value, label]) => (
+            {([['all', `All ${counts.all}`], ['stack', `In use ${counts.stack}`], ['favorites', 'Favorites'], ['recent', 'Recent']] as Array<[LocalFilter, string]>).map(([value, label]) => (
               <button key={value} type="button" role="radio" aria-checked={filter === value} className={cn(filter === value && 'active')} onClick={() => setFilter(value)}>{label}</button>
             ))}
+            {scan?.running && scan.total ? <span className="lb-scan" role="status"><Loader2 size={12} className="spin" /> Matching with Civitai · {scan.done} of {scan.total}</span> : null}
           </div>
         ) : (
           <p className="lb-scope"><span>{civitai.state.bases.length ? <>Made for <strong>{civitai.state.bases.join(', ')}</strong></> : 'Made for this model'}{civitai.state.site ? ` · ${civitai.state.site}` : ''}{civitaiQuery.trim() ? '' : ' · most downloaded first'}</span></p>

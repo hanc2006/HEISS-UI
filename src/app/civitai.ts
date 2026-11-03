@@ -76,6 +76,18 @@ export function saveCivitaiSettings(body: { token?: string; mature?: boolean }) 
 /** Which Civitai LoRA a file on this computer is, when Civitai knows it (server/lora-previews.js). */
 export type CivitaiRef = { versionId: number; modelId: number; name: string; version: string; baseModel: string };
 
+/** Which Civitai LoRA a file on this computer is and what Civitai says about it (kept in its .civitai.json). */
 export function findLoraOnCivitai(name: string, signal?: AbortSignal) {
-  return apiJson<{ found: boolean; ref?: CivitaiRef }>(`/api/loras/civitai?name=${encodeURIComponent(name)}`, { signal });
+  return apiJson<{ found: boolean; ref?: CivitaiRef; details?: CivitaiLoraDetails }>(`/api/loras/civitai?name=${encodeURIComponent(name)}`, { signal });
+}
+
+export type LoraScanState = { running: boolean; total: number; done: number; matched: number; failed: number; finishedAt: number };
+
+/** Matches every LoRA on this computer without a .civitai.json with Civitai, in the background. */
+export function startLoraScan() {
+  return apiJson<LoraScanState>('/api/loras/civitai/scan', { method: 'POST' });
+}
+
+export function loadLoraScan() {
+  return apiJson<LoraScanState>('/api/loras/civitai/scan');
 }

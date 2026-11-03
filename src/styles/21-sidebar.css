@@ -375,32 +375,6 @@
 }
 /* Made for another model than the one in use. */
 .lb-model.is-other { background: rgb(255 154 82 / .14); color: var(--ember); }
-.lb-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: -8px; font-size: 12px; color: hsl(var(--muted-foreground)); font-variant-numeric: tabular-nums; }
-.lb-badges .lb-model { max-width: 100%; font-size: 11.5px; padding: 2px 8px; }
-.lb-byline { margin-top: -8px; overflow-wrap: anywhere; }
-.lb-note svg { vertical-align: -2px; margin-right: 4px; }
-/* The pictures made with it, small, under the big one. */
-.lb-gallery { display: flex; gap: 6px; margin-top: -8px; overflow-x: auto; scrollbar-width: none; }
-.lb-gallery::-webkit-scrollbar { display: none; }
-.lb-gallery button {
-  flex: none;
-  position: relative;
-  width: 48px;
-  height: 48px;
-  padding: 0;
-  overflow: hidden;
-  border: 0;
-  border-radius: 8px;
-  background: var(--well);
-  opacity: .6;
-  cursor: pointer;
-  transition: opacity var(--motion-fast) var(--motion-ease), box-shadow var(--motion-fast) var(--motion-ease);
-}
-.lb-gallery button:hover { opacity: .9; }
-.lb-gallery button.active { opacity: 1; box-shadow: inset 0 0 0 2px #fff; }
-.lb-gallery img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.lb-gallery button.active img { inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); border-radius: 6px; }
-.civitai-card-media .wf-thumb-empty.is-named span { font-size: 20px; }
 .lb-card .wf-current.is-quiet { color: hsl(var(--muted-foreground)); }
 .lb-card .wf-current.is-quiet::before { display: none; }
 .lb-card .wf-current svg { flex: none; }
@@ -683,3 +657,125 @@ button.lora-pill:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   .lora-browser .lora-source .segmented button { flex: 1; }
   .lb-scope { padding: 0 14px; min-height: 44px; }
 }
+
+/* ------------------------------------------------- LoRA detail: picture card */
+
+.lb-detail { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.lb-hero {
+  border-radius: calc(var(--r-media) + 8px);
+  background: rgb(255 255 255 / .04);
+  box-shadow: inset 0 0 0 1px var(--surface-border), 0 18px 40px rgb(0 0 0 / .35);
+}
+.lb-hero-media { position: relative; aspect-ratio: 1 / 1; border-radius: calc(var(--r-media) + 8px) calc(var(--r-media) + 8px) 0 0; background: var(--well); overflow: hidden; }
+.lb-hero-media > img, .lb-hero-media > .lb-skeleton { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; display: block; }
+/* The name over the picture, on a soft shade so it reads on any picture. */
+.lb-hero-media::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 46%;
+  z-index: 1;
+  background: linear-gradient(to bottom, rgb(0 0 0 / .55), transparent);
+  pointer-events: none;
+}
+.lb-hero-name {
+  position: absolute;
+  z-index: 2;
+  top: 18px;
+  left: 20px;
+  right: 60px;
+  margin: 0;
+  color: #fff;
+  font-size: 20px;
+  font-weight: 650;
+  line-height: 1.2;
+  letter-spacing: -.02em;
+  text-shadow: 0 1px 12px rgb(0 0 0 / .45);
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.lb-hero-heart {
+  position: absolute;
+  z-index: 2;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgb(0 0 0 / .4);
+  color: #fff;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: background var(--motion-fast) var(--motion-ease), color var(--motion-fast) var(--motion-ease);
+}
+.lb-hero-heart:hover { background: rgb(0 0 0 / .6); }
+.lb-hero-heart.active { color: #ff8f7f; }
+.lb-hero-heart:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.lb-hero-media .civitai-card-step, .lb-hero-media .civitai-card-count { z-index: 2; }
+.lb-hero-media .wf-thumb-empty { z-index: 0; }
+
+/* Under the picture: the model it was made for and its size, then the split button. */
+.lb-hero-foot { display: flex; align-items: center; gap: 12px; padding: 14px 14px 14px 18px; border-radius: 0 0 calc(var(--r-media) + 8px) calc(var(--r-media) + 8px); background: rgb(0 0 0 / .18); }
+.lb-hero-facts { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.lb-hero-facts strong { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lb-hero-facts strong.is-other { color: var(--ember); }
+.lb-hero-facts > span { font-size: 12.5px; color: hsl(var(--muted-foreground)); font-variant-numeric: tabular-nums; }
+
+/* Split button: the main action, a hairline, the chevron with Remove and Visit Civitai. */
+.split-button { position: relative; flex: none; display: inline-flex; align-items: stretch; height: 40px; border-radius: var(--r-pill); background: #0d0d0d; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); }
+.split-button > button { display: inline-flex; align-items: center; gap: 8px; border: 0; background: transparent; color: #fff; font-size: 13.5px; font-weight: 600; cursor: pointer; transition: background var(--motion-fast) var(--motion-ease); }
+.split-button-main { padding: 0 14px 0 16px; border-radius: var(--r-pill) 0 0 var(--r-pill); white-space: nowrap; }
+.split-button-more { padding: 0 12px 0 10px; border-radius: 0 var(--r-pill) var(--r-pill) 0; color: hsl(var(--foreground) / .8) !important; }
+.split-button > button:hover:not(:disabled) { background: rgb(255 255 255 / .08); }
+.split-button > button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.split-button > button:disabled { cursor: default; color: hsl(var(--foreground) / .55); }
+.split-button.is-busy .split-button-main { color: hsl(var(--foreground) / .8); }
+.split-button-divider { width: 1px; margin: 8px 0; background: rgb(255 255 255 / .16); }
+.split-button.is-open .split-button-more svg { transform: rotate(180deg); }
+.split-button-more svg { transition: transform var(--motion-fast) var(--motion-ease); }
+.split-button-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 180px;
+  display: grid;
+  gap: 1px;
+  padding: 6px;
+  border-radius: calc(var(--r-item) + 2px);
+  background: #1c1c1c;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1), 0 16px 36px rgb(0 0 0 / .55);
+  animation: set-page-in var(--motion-base) var(--motion-ease);
+}
+.split-button-item { display: flex; align-items: center; gap: 10px; min-height: 34px; padding: 0 10px; border: 0; border-radius: var(--r-item); background: transparent; color: hsl(var(--foreground)); font-size: 13px; font-weight: 500; text-align: left; text-decoration: none; cursor: pointer; }
+.split-button-item:hover:not(:disabled), .split-button-item:focus-visible { outline: none; background: var(--control-hover); }
+.split-button-item.is-danger:not(:disabled) { color: var(--danger-ink, #ff8a80); }
+.split-button-item:disabled { opacity: .4; cursor: default; }
+.split-button-item svg { flex: none; opacity: .8; }
+
+/* Skeleton while Civitai's answer is on its way. */
+@keyframes lb-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.lb-skeleton {
+  display: block;
+  border-radius: 6px;
+  background: linear-gradient(90deg, rgb(255 255 255 / .05) 0%, rgb(255 255 255 / .1) 50%, rgb(255 255 255 / .05) 100%);
+  background-size: 200% 100%;
+  animation: lb-shimmer 1.4s linear infinite;
+}
+.lb-skeleton.is-media { border-radius: 0; }
+.lb-skeleton.is-text { display: inline-block; width: 64px; height: 11px; vertical-align: middle; }
+.lb-skeleton-facts { display: grid; gap: 12px; }
+.lb-skeleton-facts > div { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.lb-skeleton.is-label { width: 26%; height: 11px; }
+.lb-skeleton.is-value { height: 20px; }
+.lb-skeleton.is-block { height: 64px; margin-top: 4px; }
+@media (prefers-reduced-motion: reduce) { .lb-skeleton { animation: none; } }
+
+/* The background match with Civitai, after the filters. */
+.lb-scan { flex: none; display: inline-flex; align-items: center; gap: 6px; margin-left: auto; padding-left: 10px; font-size: 11.5px; color: hsl(var(--muted-foreground)); white-space: nowrap; }

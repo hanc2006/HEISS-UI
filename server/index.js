@@ -44,7 +44,7 @@ import { emptyTrash, restoreTrash, scheduleTrashPurge, trashGalleryItems, trashS
 import { jobs, queueClearsAt, runJob, runMockJob, setTerminalJob } from './jobs.js';
 import { cancelPrompt, cancelPrompts } from './comfy-queue.js';
 import { loraInfos } from './lora-info.js';
-import { loraFileFacts, loraOnCivitai, loraPreview, saveLoraPreview } from './lora-previews.js';
+import { loraCivitaiInfo, loraFileFacts, loraPreview, loraScanState, saveLoraPreview, startLoraScan } from './lora-previews.js';
 import { hfEndpoint, hfTokenStatus, saveHfToken } from './hf-access.js';
 import { civitaiDownload, civitaiStatus, loraDetails, saveCivitaiMature, saveCivitaiToken, searchLoras } from './civitai-api.js';
 import { deleteImportedWorkflow, getCustomWorkflow, saveImportedWorkflow, userWorkflowsDir, validateGraph } from './custom-workflows.js';
@@ -1560,10 +1560,26 @@ app.get("/api/loras/info", async (_req, res) => {
 // Which Civitai LoRA a file on this computer is (lora-previews.js), for its details in the LoRA browser.
 app.get("/api/loras/civitai", async (req, res) => {
   try {
-    const ref = await loraOnCivitai(String(req.query.name || ""));
-    res.json({ ok: true, found: Boolean(ref), ...(ref ? { ref } : {}) });
+    const info = await loraCivitaiInfo(String(req.query.name || ""));
+    res.json({ ok: true, found: Boolean(info), ...(info || {}) });
   } catch (error) {
     res.status(502).json({ ok: false, error: error.message });
+  }
+});
+
+// Every LoRA on this computer without a .civitai.json, matched with Civitai in the background (lora-previews.js).
+app.get("/api/loras/civitai/scan", (_req, res) => {
+  res.json({ ok: true, ...loraScanState() });
+});
+
+app.post("/api/loras/civitai/scan", async (req, res) => {
+  if (!requireAdmin(req, res)) return;
+  try {
+    const { info } = await loadComfyContext();
+    startLoraScan(optionsFor(info, "LoraLoader", "lora_name")).catch(() => {});
+    res.json({ ok: true, ...loraScanState() });
+  } catch (error) {
+    res.status(503).json({ ok: false, error: comfyDownMessage(error?.message) });
   }
 });
 

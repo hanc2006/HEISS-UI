@@ -35,9 +35,27 @@ function load(key: string) {
   return promise;
 }
 
+// Asked again on purpose (new .civitai.json files beside the LoRAs): every panel picks it up.
+const listeners = new Set<() => void>();
+let generation = 0;
+
+/** Forgets the answer and asks again, for every panel showing LoRA info. */
+export function refreshLoraInfo() {
+  cached = null;
+  pending = null;
+  generation += 1;
+  for (const listener of listeners) listener();
+}
+
 export function useLoraInfo(options: string[]) {
   const key = options.join('\n');
   const [loras, setLoras] = React.useState<Record<string, LoraInfo>>(() => (cached?.key === key ? cached.loras : {}));
+  const [round, setRound] = React.useState(generation);
+  React.useEffect(() => {
+    const listener = () => setRound(generation);
+    listeners.add(listener);
+    return () => { listeners.delete(listener); };
+  }, []);
   React.useEffect(() => {
     if (!options.length) return;
     if (cached?.key === key) { setLoras(cached.loras); return; }
@@ -46,7 +64,7 @@ export function useLoraInfo(options: string[]) {
     load(key).then((next) => { if (live) setLoras(next); }).catch(() => null);
     return () => { live = false; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, round]);
   return loras;
 }
 

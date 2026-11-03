@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight, ExternalLink, Heart, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Heart } from 'lucide-react';
 import { loadLoraDetails, searchCivitaiLoras, type CivitaiLora, type CivitaiLoraDetails } from './civitai';
 import { copyText } from './api';
 import { CopyIcon, useCopyFeedback } from './CopyFeedback';
@@ -90,40 +90,38 @@ export function useCivitaiLoras({ enabled, query, profile }: { enabled: boolean;
 
 /**
  * One LoRA in the browser's detail panel, from this computer or Civitai, laid
- * out the same either way: its pictures (a gallery), its name with the model
- * it was made for and its size as badges, `action` (Add, Download, In stack),
- * then Civitai's trigger words, usage tips, how the picture on show was made,
- * and the link to its page. A LoRA Civitai doesn't know shows what its file says.
+ * out the same either way. A picture card: its pictures with the LoRA's name
+ * over them and the heart in the corner, and under them the model it was
+ * made for, its size and the split button (`action`). Then only what helps
+ * using it: trigger words, usage tips, how the picture on show was made, and
+ * its prompt. While Civitai's answer is on its way, a skeleton holds its place.
  */
-export function LoraDetail({ id, name, fileName = '', model = '', otherModel = false, size = 0, version = '', byline = '', previews = [], state, triggers: ownTriggers = [], action, favorite, note, page = '', onRetry }: {
-  /** Which LoRA: the gallery starts over when it changes. */
+export function LoraDetail({ id, name, model = '', otherModel = false, size = 0, previews = [], details = null, loading = false, error = '', onRetry, triggers: ownTriggers = [], action, favorite, note }: {
+  /** Which LoRA: the pictures start over when it changes. */
   id: string;
   name: string;
-  /** The file's own name, when it differs from the name shown. */
-  fileName?: string;
   model?: string;
   /** Made for another model than the one in use: its badge says so. */
   otherModel?: boolean;
   size?: number;
-  version?: string;
-  /** Who made it, how often it was downloaded. */
-  byline?: string;
   /** Pictures to show until (or unless) Civitai's arrive. */
   previews?: string[];
-  state?: DetailsState;
+  details?: CivitaiLoraDetails | null;
+  /** Civitai's answer is on its way. */
+  loading?: boolean;
+  error?: string;
+  onRetry?: () => void;
   /** Trigger words the file itself names; Civitai's are added to them. */
   triggers?: string[];
+  /** The split button. */
   action: React.ReactNode;
   favorite?: { on: boolean; toggle: () => void };
   note?: React.ReactNode;
-  page?: string;
-  onRetry?: () => void;
 }) {
   const [index, setIndex] = useState(0);
   const [expanded, setExpanded] = useState(false);
   const { copied, copyWith } = useCopyFeedback();
   useEffect(() => { setIndex(0); setExpanded(false); }, [id]);
-  const details = state && !state.loading && 'details' in state ? state.details : null;
   const images = details?.images.length ? details.images : previews.filter(Boolean).map((url) => ({ url, width: null, height: null, made: null }));
   const image = images[Math.min(index, images.length - 1)];
   const made = image?.made;
@@ -141,60 +139,55 @@ export function LoraDetail({ id, name, fileName = '', model = '', otherModel = f
     made && made.clipSkip !== null ? { label: 'Clip skip', values: [String(made.clipSkip)] } : null
   ].filter((item): item is { label: string; values: string[]; tone?: 'strength' } => Boolean(item));
   const bytes = size || details?.bytes || 0;
-  const link = details?.page || page;
 
   return (
-    <section className="civitai-card is-detail" aria-label={name}>
-      <div className="civitai-card-media">
-        {image ? <SafeImg key={image.url} src={image.url} referrerPolicy="no-referrer" alt={made?.prompt ? `Made with this LoRA: ${made.prompt.slice(0, 120)}` : `A picture made with ${name}`} /> : <LoraThumb label={model || 'LoRA'} />}
-        {images.length > 1 ? (
-          <>
-            <button type="button" className="civitai-card-step is-prev" aria-label="Previous picture" onClick={() => show(index - 1)}><ChevronLeft size={16} /></button>
-            <button type="button" className="civitai-card-step is-next" aria-label="Next picture" onClick={() => show(index + 1)}><ChevronRight size={16} /></button>
-            <span className="civitai-card-count">{index + 1} / {images.length}</span>
-          </>
-        ) : null}
-      </div>
-      {images.length > 1 ? (
-        <div className="lb-gallery" role="tablist" aria-label="Pictures made with this LoRA">
-          {images.map((item, n) => (
-            <button key={item.url} type="button" role="tab" aria-selected={n === index} aria-label={`Picture ${n + 1}`} className={cn(n === index && 'active')} onClick={() => show(n)}>
-              <SafeImg src={item.url} alt="" loading="lazy" referrerPolicy="no-referrer" />
+    <section className="lb-detail" aria-label={name}>
+      <div className="lb-hero">
+        <div className="lb-hero-media">
+          {image ? <SafeImg key={image.url} src={image.url} referrerPolicy="no-referrer" alt={made?.prompt ? `Made with this LoRA: ${made.prompt.slice(0, 120)}` : `A picture made with ${name}`} />
+            : loading ? <span className="lb-skeleton is-media" aria-hidden="true" /> : <LoraThumb label="" plain />}
+          <h3 className="lb-hero-name">{name}</h3>
+          {favorite ? (
+            <button type="button" className={cn('lb-hero-heart', favorite.on && 'active')} aria-pressed={favorite.on} aria-label={favorite.on ? 'Remove from favorites' : 'Add to favorites'} onClick={favorite.toggle}>
+              <Heart size={16} fill={favorite.on ? 'currentColor' : 'none'} />
             </button>
-          ))}
+          ) : null}
+          {images.length > 1 ? (
+            <>
+              <button type="button" className="civitai-card-step is-prev" aria-label="Previous picture" onClick={() => show(index - 1)}><ChevronLeft size={16} /></button>
+              <button type="button" className="civitai-card-step is-next" aria-label="Next picture" onClick={() => show(index + 1)}><ChevronRight size={16} /></button>
+              <span className="civitai-card-count">{index + 1} / {images.length}</span>
+            </>
+          ) : null}
+        </div>
+        <div className="lb-hero-foot">
+          <div className="lb-hero-facts">
+            <strong className={cn(otherModel && 'is-other')} title={otherModel ? `Made for ${model}` : undefined}>{model || 'LoRA'}</strong>
+            <span>{bytes ? sizeLabel(bytes) : loading ? <i className="lb-skeleton is-text" aria-hidden="true" /> : 'Size unknown'}</span>
+          </div>
+          {action}
+        </div>
+      </div>
+
+      {note}
+
+      {loading && !details ? (
+        <div className="lb-skeleton-facts" aria-label="Reading from Civitai" role="status">
+          {[0, 1, 2, 3].map((n) => <div key={n}><i className="lb-skeleton is-label" /><i className="lb-skeleton is-value" style={{ width: `${[38, 24, 30, 18][n]}%` }} /></div>)}
+          <i className="lb-skeleton is-block" />
         </div>
       ) : null}
 
-      <div className="wf-detail-head">
-        <h3>{name}</h3>
-        {favorite ? (
-          <button type="button" className={cn('wf-heart', favorite.on && 'active')} aria-pressed={favorite.on} aria-label={favorite.on ? 'Remove from favorites' : 'Add to favorites'} onClick={favorite.toggle}>
-            <Heart size={16} fill={favorite.on ? 'currentColor' : 'none'} />
-          </button>
-        ) : null}
-      </div>
-      <div className="lb-badges">
-        {model ? <em className={cn('lb-model', otherModel && 'is-other')} title={otherModel ? `Made for ${model}` : undefined}>{model}</em> : null}
-        {bytes ? <span>{sizeLabel(bytes)}</span> : null}
-        {version ? <span>{version}</span> : null}
-      </div>
-      {byline || fileName ? <p className="wf-detail-meta lb-byline">{[byline, fileName].filter(Boolean).join(' · ')}</p> : null}
-      {note}
-      {action}
-
-      {triggers.length || configuration.length ? (
+      {(triggers.length || configuration.length) && !(loading && !details) ? (
         <dl className="civitai-card-facts">
           {triggers.length ? <FactRow label="Trigger words" values={triggers} tone="trigger" copied={copied} onCopy={copy} /> : null}
           {configuration.map((item) => <FactRow key={item.label} label={item.label} values={item.values} tone={item.tone} copied={copied} onCopy={copy} />)}
         </dl>
       ) : null}
 
-      {state?.loading ? <div className="civitai-loading"><Loader2 size={14} className="spin" /> Reading from Civitai…</div> : null}
-      {state && !state.loading && 'error' in state ? (
-        <p className="civitai-card-note">{state.error} {onRetry ? <button type="button" className="civitai-card-link" onClick={onRetry}>Try again</button> : null}</p>
-      ) : null}
+      {error ? <p className="civitai-card-note">{error} {onRetry ? <button type="button" className="civitai-card-link" onClick={onRetry}>Try again</button> : null}</p> : null}
 
-      {details && made?.prompt ? (
+      {made?.prompt ? (
         <div className="civitai-card-prompt">
           <div className="civitai-card-prompt-head">
             <span>Prompt</span>
@@ -205,16 +198,10 @@ export function LoraDetail({ id, name, fileName = '', model = '', otherModel = f
           {made.negativePrompt && expanded ? <p className="civitai-card-negative"><em>Negative</em> {made.negativePrompt}</p> : null}
         </div>
       ) : details && image ? <p className="civitai-card-note">No prompt shared for this picture.</p> : null}
-
-      {link ? <a className="civitai-card-open" href={link} target="_blank" rel="noreferrer noopener">Open on Civitai <ExternalLink size={12} /></a> : null}
     </section>
   );
 }
 
-/** A Civitai row's byline: who made it, how often it was downloaded. */
-export function civitaiByline(row: CivitaiLora) {
-  return [row.creator, row.downloads ? `${countLabel(row.downloads)} downloads` : ''].filter(Boolean).join(' · ');
-}
 
 /** Label on the left, its values as badges on the right; each badge copies its own value. */
 export function FactRow({ label, values, tone = '', copied, onCopy }: { label: string; values: string[]; tone?: string; copied: string | null; onCopy: (value: string, key: string) => void }) {
