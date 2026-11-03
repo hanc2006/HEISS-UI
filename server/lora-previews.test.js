@@ -23,6 +23,7 @@ const answering = (body, type = "image/jpeg", status = 200) => {
 function civitaiAnswers(sha = "", asked = []) {
   return async (url) => {
     asked.push(url.pathname);
+    if (url.hostname === "image.civitai.com") return new Response(jpeg, { status: 200, headers: { "content-type": "image/jpeg" } });
     if (url.pathname.includes("/by-hash/")) {
       return url.pathname.endsWith(sha) ? new Response(JSON.stringify({ id: 9, modelId: 4, name: "v3", baseModel: "SDXL 1.0", model: { name: "Found It" } }), { status: 200 }) : new Response("{}", { status: 404 });
     }
@@ -115,4 +116,22 @@ test("the scan matches every LoRA without a sidecar, one at a time, and says how
   assert.ok(fs.existsSync(path.join(loraDir, "s2.civitai.json")));
   assert.ok(!fs.existsSync(path.join(loraDir, "s1.civitai.json")));
   assert.equal(state.promise, undefined);
+});
+
+test("a LoRA matched with Civitai gets Civitai's first picture beside it, so its card shows it", async () => {
+  const bytes = Buffer.from("pictured weights");
+  fs.writeFileSync(path.join(loraDir, "pictured.safetensors"), bytes);
+  const sha = (await import("node:crypto")).createHash("sha256").update(bytes).digest("hex");
+  await loraOnCivitai("pictured.safetensors", { env: {}, transport: civitaiAnswers(sha) });
+  assert.deepEqual(fs.readFileSync(path.join(loraDir, "pictured.preview.jpeg")), jpeg);
+  assert.ok(loraFileFacts("pictured.safetensors").preview > 0);
+  // A .civitai.json written by the version before (no picture saved): the next scan brings the picture, without asking Civitai again.
+  fs.writeFileSync(path.join(loraDir, "older.safetensors"), Buffer.from("older weights"));
+  const sidecar = JSON.parse(fs.readFileSync(path.join(loraDir, "pictured.civitai.json"), "utf8"));
+  fs.writeFileSync(path.join(loraDir, "older.civitai.json"), JSON.stringify(sidecar));
+  const asked = [];
+  await startLoraScan(["older.safetensors", "pictured.safetensors"], { env: {}, transport: civitaiAnswers(sha, asked) });
+  assert.equal(loraScanState().total, 1, "pictured has its picture already");
+  assert.ok(fs.existsSync(path.join(loraDir, "older.preview.jpeg")));
+  assert.deepEqual(asked.filter((item) => item.startsWith("/api/")), [], "only the picture was fetched");
 });

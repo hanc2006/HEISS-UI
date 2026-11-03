@@ -144,8 +144,31 @@ async function sha256Of(file, key) {
 /** Whether a file still needs Civitai: no sidecar, or one without details for this mature setting, and not known to be unknown. */
 function needsCivitai(file, mature) {
   const saved = readSidecar(file);
-  if (saved) return !saved.details || saved.mature !== mature;
+  if (saved) return !saved.details || saved.mature !== mature || needsPicture(file, saved.details);
   try { return !unknown().has(fileKey(file)); } catch { return false; }
+}
+
+// Pictures tried this run: one that won't download isn't asked for again until a restart.
+const pictureTried = new Set();
+const needsPicture = (file, details) => Boolean(details?.images?.length) && !previewBeside(file) && !pictureTried.has(file);
+
+/**
+ * Civitai's first picture of a LoRA, saved beside it as its preview when it has
+ * none, so its card shows it. Best effort: true when saved.
+ */
+async function savePictureFrom(file, details, { env, transport }) {
+  if (!needsPicture(file, details)) return false;
+  pictureTried.add(file);
+  try {
+    const image = await civitaiImage(details.images[0].url, { env, transport });
+    if (!image) return false;
+    const target = `${stemOf(file)}.preview.${image.ext}`;
+    fs.writeFileSync(`${target}.part`, image.bytes);
+    fs.renameSync(`${target}.part`, target);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -159,7 +182,10 @@ export async function loraCivitaiInfo(name, { env = process.env, transport = nul
   if (!file) return null;
   const mature = civitaiMature(env);
   const saved = readSidecar(file);
-  if (saved?.details && saved.mature === mature) return { ref: saved.ref, details: saved.details };
+  if (saved?.details && saved.mature === mature) {
+    await savePictureFrom(file, saved.details, { env, transport });
+    return { ref: saved.ref, details: saved.details };
+  }
   let ref = saved?.ref || null;
   if (!ref) {
     const key = fileKey(file);
@@ -177,6 +203,7 @@ export async function loraCivitaiInfo(name, { env = process.env, transport = nul
     throw error;
   }
   try { writeSidecar(file, ref, details, mature); } catch { /* read-only folder: asked again next time */ }
+  await savePictureFrom(file, details, { env, transport });
   return { ref, details };
 }
 

@@ -779,3 +779,17 @@ button.lora-pill:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 /* The background match with Civitai, after the filters. */
 .lb-scan { flex: none; display: inline-flex; align-items: center; gap: 6px; margin-left: auto; padding-left: 10px; font-size: 11.5px; color: hsl(var(--muted-foreground)); white-space: nowrap; }
+
+/* The picture card spans the detail panel edge to edge; the facts below keep the panel's margins. */
+.lora-browser .wf-detail .lb-hero {
+  margin: -20px -22px 0;
+  border-radius: 0;
+  box-shadow: inset 0 -1px 0 var(--surface-border);
+}
+.lora-browser .wf-detail .lb-hero-media,
+.lora-browser .wf-detail .lb-hero-foot { border-radius: 0; }
+.lora-browser .wf-detail .lb-hero-foot { padding: 14px 22px; }
+@media (max-width: 760px) {
+  /* On a phone the back button sits above it, so the card starts under that. */
+  .lora-browser .wf-detail .lb-hero { margin-top: 0; }
+}
