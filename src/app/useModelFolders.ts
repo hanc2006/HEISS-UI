@@ -62,12 +62,12 @@ export function useModelFolders({ connected, emptyModels, onModelsChanged, showT
     return next.offline ? 'offline' : next.local === false ? 'remote' : next.folders.length ? 'found' : 'none';
   }, []);
 
-  const scan = useCallback(async ({ quiet = false } = {}) => {
+  const scan = useCallback(async ({ quiet = false, everywhere = false } = {}) => {
     if (busy.current) return null;
     if (!quiet) setStage('scanning');
     // Long enough for the search to read as a search, even on a fast disk.
     const [next] = await Promise.all([
-      apiJson<ModelFolderReport>('/api/model-folders').catch((reason) => ({ ok: false, folders: [], linked: [], error: reason instanceof Error ? reason.message : 'Couldn’t scan for models' } as ModelFolderReport)),
+      apiJson<ModelFolderReport>(everywhere ? '/api/model-folders?everywhere=1' : '/api/model-folders').catch((reason) => ({ ok: false, folders: [], linked: [], error: reason instanceof Error ? reason.message : 'Couldn’t scan for models' } as ModelFolderReport)),
       quiet ? Promise.resolve() : sleep(1100)
     ]);
     if (!alive.current || busy.current) return next;

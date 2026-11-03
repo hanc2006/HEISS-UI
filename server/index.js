@@ -2647,9 +2647,10 @@ const comfyIsLocal = () => {
   try { return ["127.0.0.1", "localhost", "::1", "[::1]"].includes(new URL(comfyUrl).hostname); } catch { return false; }
 };
 
-app.get("/api/model-folders", async (_req, res) => {
+app.get("/api/model-folders", async (req, res) => {
   try {
-    res.json(await modelFolderReport({ local: comfyIsLocal() }));
+    // ?everywhere=1: the whole disk, for a server where the usual places held nothing.
+    res.json(await modelFolderReport({ local: comfyIsLocal(), scan: { everywhere: req.query.everywhere === "1" } }));
   } catch (error) {
     res.status(500).json({ ok: false, error: error.message });
   }

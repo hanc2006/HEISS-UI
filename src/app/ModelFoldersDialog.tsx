@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion, useReducedMotion } from 'framer-motion';
-import { Check, FolderOpen, FolderPlus, RefreshCw } from 'lucide-react';
+import { Check, FolderOpen, FolderPlus, RefreshCw, Search } from 'lucide-react';
 import { Modal } from './Modal';
 import { AnimatedNumber } from './AnimatedNumber';
 import { ComfyRestart, useComfyRestarting } from './ComfyRestart';
@@ -61,7 +61,7 @@ function Steps({ stage }: { stage: ModelFolderStage }) {
   );
 }
 
-function copyFor(stage: ModelFolderStage, folders: StrayModelFolder[], added: ModelFolders['added'], saved = false, comfyRestarting = false, remoteCount = 0): { title: string; description: string } {
+function copyFor(stage: ModelFolderStage, folders: StrayModelFolder[], added: ModelFolders['added'], saved = false, comfyRestarting = false, remoteCount = 0, everywhere = false): { title: string; description: string } {
   const count = folders.reduce((sum, folder) => sum + folder.count, 0);
   switch (stage) {
     case 'scanning': return { title: 'Searching for models', description: 'Checking your folders, other ComfyUI installs and connected drives.' };
@@ -73,7 +73,7 @@ function copyFor(stage: ModelFolderStage, folders: StrayModelFolder[], added: Mo
           : `They’re in ${folders[0].name}, which ComfyUI doesn’t read.`
         : `They’re in ${plural(folders.length, 'folder')} ComfyUI doesn’t fully read.`
     };
-    case 'none': return { title: 'No models found outside ComfyUI', description: 'If models are somewhere else, choose the folder.' };
+    case 'none': return { title: 'No models found outside ComfyUI', description: everywhere ? 'Every folder on this computer was searched.' : 'Searched the usual places. Search every folder on this computer to look further.' };
     case 'remote': return remoteCount
       ? { title: `ComfyUI reads ${plural(remoteCount, 'model')}`, description: 'It runs on another computer, so these come from its own model folders there.' }
       : { title: 'ComfyUI runs on another computer', description: 'Only folders on the computer running HEISS UI can be searched.' };
@@ -135,10 +135,12 @@ export function ModelFoldersDialog({ folders: state, runningCount = 0 }: { folde
   const heroFiles = stage === 'found' ? chosenCount : added.count || chosenCount;
   const comfyRestarting = useComfyRestarting();
   const remote = report?.remote;
-  const { title, description } = copyFor(stage, folders, added, state.saved, comfyRestarting, remote?.count || 0);
+  const { title, description } = copyFor(stage, folders, added, state.saved, comfyRestarting, remote?.count || 0, Boolean(report?.searchedEverywhere));
   const toggle = (path: string) => state.setSelected(selected.includes(path) ? selected.filter((item) => item !== path) : [...selected, path]);
   const later = <button className="btn is-ghost" onClick={state.close}>Not now</button>;
-  const choose = <button className="btn" onClick={state.pick}><FolderOpen size={14} /> Choose a folder…</button>;
+  // The picker opens a desktop window, so only where there is one (not on a headless server).
+  const choose = report?.canPick ? <button className="btn" onClick={state.pick}><FolderOpen size={14} /> Choose a folder…</button> : null;
+  const everywhere = report?.searchedEverywhere ? null : <button className="btn" onClick={() => state.scan({ everywhere: true })}><Search size={14} /> Search everywhere</button>;
 
   let body: React.ReactNode = null;
   let footer: React.ReactNode = null;
@@ -175,7 +177,7 @@ export function ModelFoldersDialog({ folders: state, runningCount = 0 }: { folde
         {report.linked.map((item) => <li key={item.path}><Check size={12} strokeWidth={3} /><code title={item.path}>{item.label}</code><span>{item.read ? 'Read by ComfyUI' : 'Restart ComfyUI to read it'}</span></li>)}
       </ul>
     ) : null;
-    footer = <>{choose}<button className="btn is-primary" onClick={state.close}>Done</button></>;
+    footer = <>{everywhere}{choose}<button className="btn is-primary" onClick={state.close}>Done</button></>;
   } else if (stage === 'remote') {
     body = (
       <>

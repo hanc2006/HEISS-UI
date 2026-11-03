@@ -39,7 +39,7 @@ globalThis.fetch = async (url) => {
   return new Response(JSON.stringify(body), { status: body ? 200 : 404, headers: { "content-type": "application/json" } });
 };
 
-const { heissSections, linkModelFolders, modelFolderReport, readLayout, sectionDirs, sectionFor, tildePath, unlinkModelFolder } = await import("./model-folders.js");
+const { canPickFolder, heissSections, linkModelFolders, modelFolderReport, readLayout, sectionDirs, sectionFor, tildePath, unlinkModelFolder } = await import("./model-folders.js");
 const scan = { home, drives: false };
 const config = path.join(comfyRoot, "extra_model_paths.yaml");
 
@@ -175,4 +175,34 @@ test("a ComfyUI on another computer: the report says what it reads, from its own
   } finally {
     globalThis.fetch = saved;
   }
+});
+
+test("a server's models are found where they usually live: next to ComfyUI, and in folders named in HEISS_MODEL_SEARCH_PATHS", async () => {
+  // A pod: /workspace/ComfyUI, and its models in /workspace/models next to it.
+  touch(path.join(scratch, "models", "loras", "pod-style.safetensors"));
+  touch(path.join(scratch, "models", "checkpoints", "pod-model.safetensors"));
+  // And a volume mounted somewhere else entirely.
+  const volume = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "heiss-volume-")));
+  touch(path.join(volume, "ai", "models", "loras", "volume-style.safetensors"));
+  touch(path.join(volume, "ai", "models", "vae", "volume-vae.safetensors"));
+  process.env.HEISS_MODEL_SEARCH_PATHS = volume;
+  try {
+    const report = await modelFolderReport({ scan });
+    const paths = report.folders.map((folder) => folder.path);
+    assert.ok(paths.includes(path.join(scratch, "models")), "the folder beside ComfyUI");
+    assert.ok(paths.includes(path.join(volume, "ai", "models")), "the folder named in HEISS_MODEL_SEARCH_PATHS");
+    assert.equal(report.searchedEverywhere, false);
+    assert.equal(typeof report.canPick, "boolean");
+  } finally {
+    delete process.env.HEISS_MODEL_SEARCH_PATHS;
+    fs.rmSync(volume, { recursive: true, force: true });
+    fs.rmSync(path.join(scratch, "models"), { recursive: true, force: true });
+  }
+});
+
+test("a folder picker is offered only where one can open: a desktop, not a headless server", () => {
+  assert.equal(canPickFolder({}, "darwin"), true);
+  assert.equal(canPickFolder({}, "win32"), true);
+  assert.equal(canPickFolder({}, "linux"), false);
+  assert.equal(canPickFolder({ DISPLAY: ":0" }, "linux"), true);
 });

@@ -499,5 +499,9 @@ export type ModelFolderReport = {
   /** ComfyUI on another computer: what it already reads, from its own API. */
   remote?: { count: number; kinds: Array<{ kind: string; count: number; examples: string[] }>; dirs: string[] };
   scannedAt?: number;
+  /** A folder picker can open here (a desktop); a headless server is searched instead. */
+  canPick?: boolean;
+  /** This report searched every folder on the server, not just the usual places. */
+  searchedEverywhere?: boolean;
   error?: string;
 };

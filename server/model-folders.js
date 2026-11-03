@@ -293,8 +293,23 @@ async function localDrives() {
   return letters;
 }
 
-/** Folders worth a look: shared spots other apps use, then a shallow walk of home and the other drives. */
-async function candidateRoots(home, drivesToo = true) {
+// At the top of a whole-disk search: the system's own folders hold no models.
+const systemNames = /^(usr|lib|lib32|lib64|libx32|bin|sbin|etc|boot|run|tmp|var|proc|sys|dev|snap|lost\+found|nix|private|cores)$/i;
+
+/** Whether a native folder picker can open on this machine (a desktop, not a headless server). */
+export function canPickFolder(env = process.env, platform = process.platform) {
+  if (platform === "darwin" || platform === "win32") return true;
+  return Boolean(env.DISPLAY || env.WAYLAND_DISPLAY);
+}
+
+/**
+ * Folders worth a look: shared spots other apps use, then a shallow walk of
+ * home and the other drives. On a Linux server (a cloud GPU pod, say) also the
+ * places models usually live there (/workspace, mounted volumes), the folder
+ * ComfyUI sits in, and HEISS_MODEL_SEARCH_PATHS. `everywhere`: the whole disk,
+ * deeper, for when none of that found anything.
+ */
+async function candidateRoots(home, drivesToo = true, { comfyRoot = "", everywhere = false, env = process.env } = {}) {
   const explicit = [];
   const add = (dir, source) => { if (dir) explicit.push({ dir, source }); };
   if (process.platform === "darwin") {
@@ -317,6 +332,18 @@ async function candidateRoots(home, drivesToo = true) {
     add(path.join(home, ".config", "StabilityMatrix", "Models"), "stability");
   }
   const walkRoots = [{ dir: home, depth: 4, source: "home" }];
+  // Folders the person named, then the folder ComfyUI sits in (its neighbours often hold models too).
+  for (const dir of String(env.HEISS_MODEL_SEARCH_PATHS || "").split(path.delimiter).map((item) => item.trim()).filter(Boolean)) {
+    walkRoots.push({ dir, depth: 4, source: "setting" });
+  }
+  if (comfyRoot) walkRoots.push({ dir: path.dirname(path.resolve(comfyRoot)), depth: 3, source: "server" });
+  // `drivesToo` off (tests, a quick look) keeps the walk to home and the folders named above.
+  if (process.platform === "linux" && drivesToo) {
+    for (const [dir, depth] of [["/workspace", 4], ["/runpod-volume", 3], ["/data", 3], ["/mnt", 3], ["/models", 2], ["/opt", 3], ["/srv", 3], ["/home", 3]]) {
+      if (isDir(dir)) walkRoots.push({ dir, depth, source: "server" });
+    }
+  }
+  if (everywhere && drivesToo && process.platform !== "win32") walkRoots.push({ dir: "/", depth: 6, source: "server", skipTop: systemNames });
   const drives = !drivesToo ? "" : process.platform === "darwin" ? "/Volumes" : process.platform === "linux" ? path.join("/media", os.userInfo().username) : "";
   if (drives) {
     for (const name of await subdirsAsync(drives)) {
@@ -328,7 +355,15 @@ async function candidateRoots(home, drivesToo = true) {
     for (const letter of await localDrives()) walkRoots.push({ dir: `${letter}:\\`, depth: 3, source: "drive" });
     walkRoots.push({ dir: "C:\\", depth: 3, narrowFrom: 3, source: "drive" });
   }
-  return { explicit, walkRoots };
+  // The same folder once, wherever it came from.
+  const seen = new Set();
+  const unique = walkRoots.filter((root) => {
+    const key = pathKey(realpath(root.dir));
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return { explicit, walkRoots: unique };
 }
 
 /**
@@ -337,10 +372,12 @@ async function candidateRoots(home, drivesToo = true) {
  * asynchronous with a time limit per folder, so a slow drive never blocks the
  * server while it looks.
  */
-export async function findModelFolders(knownKinds, { home = os.homedir(), drives = true, budget = 6000, deadline } = {}) {
-  const { explicit, walkRoots } = await candidateRoots(home, drives);
+export async function findModelFolders(knownKinds, { home = os.homedir(), drives = true, budget, deadline, comfyRoot = "", everywhere = false, env = process.env } = {}) {
+  const { explicit, walkRoots } = await candidateRoots(home, drives, { comfyRoot, everywhere, env });
   // Counted from here, so asking Windows for its drives does not use up the walk's time.
-  const until = deadline ?? Date.now() + 4000;
+  // Searching everywhere is asked for on purpose, so it may take longer.
+  const until = deadline ?? Date.now() + (everywhere ? 25_000 : 6000);
+  budget ??= everywhere ? 80_000 : 12_000;
   const found = new Map();
   // Returns the folder's subfolder names when it is not a models folder, for the walk to go on.
   const consider = async (dir, source) => {
@@ -354,7 +391,7 @@ export async function findModelFolders(knownKinds, { home = os.homedir(), drives
   };
   for (const { dir, source } of explicit) await consider(dir, source);
   let visited = 0;
-  for (const { dir: start, depth: maxDepth, narrowFrom = Infinity, source } of walkRoots) {
+  for (const { dir: start, depth: maxDepth, narrowFrom = Infinity, source, skipTop } of walkRoots) {
     const queue = [{ dir: start, depth: 0 }];
     while (queue.length && visited < budget && Date.now() < until) {
       const { dir, depth } = queue.shift();
@@ -363,7 +400,7 @@ export async function findModelFolders(knownKinds, { home = os.homedir(), drives
       const names = depth > 0 ? await consider(dir, source) : await subdirsAsync(dir);
       if (!names || depth >= maxDepth) continue;
       for (const name of names) {
-        if (skipNames.test(name) || (depth + 1 >= narrowFrom && !aiNames.test(name))) continue;
+        if (skipNames.test(name) || (depth === 0 && skipTop?.test(name)) || (depth + 1 >= narrowFrom && !aiNames.test(name))) continue;
         queue.push({ dir: path.join(dir, name), depth: depth + 1 });
       }
     }
@@ -458,7 +495,7 @@ export async function modelFolderReport({ local = true, scan = {} } = {}) {
     return { path: section.path, label: tildePath(section.path), read: allRead };
   });
   const folders = [];
-  for (const folder of await findModelFolders(knownKinds, scan)) {
+  for (const folder of await findModelFolders(knownKinds, { comfyRoot: setup.root, ...scan })) {
     const kinds = [];
     for (const { name, kind } of folder.map) {
       const dir = realpath(path.join(folder.dir, name));
@@ -486,7 +523,11 @@ export async function modelFolderReport({ local = true, scan = {} } = {}) {
     });
   }
   folders.sort((a, b) => b.count - a.count);
-  lastReport = { ok: true, local: true, root: setup.root, configPath: setup.configPath, configLabel: tildePath(setup.configPath), writable: canWrite(setup.configPath), folders, linked, scannedAt: Date.now() };
+  lastReport = {
+    ok: true, local: true, root: setup.root, configPath: setup.configPath, configLabel: tildePath(setup.configPath), writable: canWrite(setup.configPath), folders, linked, scannedAt: Date.now(),
+    // A picker can only open on a desktop; a server is searched instead (everywhere, on request).
+    canPick: canPickFolder(), searchedEverywhere: Boolean(scan.everywhere)
+  };
   return lastReport;
 }
 
