@@ -1,9 +1,11 @@
 #!/usr/bin/env bash
 # Runs HEISS UI as a server (no browser) from a source checkout, in the background.
 #
-#   HEISS_COMFY_ROOT=/path/to/ComfyUI ./scripts/run-server.sh          start (or restart)
-#   ./scripts/run-server.sh stop | status | logs                       manage it
-#   HEISS_COMFY_ROOT=… ./scripts/run-server.sh --foreground            run in this terminal
+#   ./scripts/run-server.sh                           start (or restart)
+#   ./scripts/run-server.sh stop | status | logs      manage it
+#   ./scripts/run-server.sh --foreground              run in this terminal
+#
+# ComfyUI is looked for in /workspace/ComfyUI; set HEISS_COMFY_ROOT for another folder.
 #
 # Installs packages and builds the studio when needed (first run, a changed
 # package-lock.json, a new commit), then starts it in the background with a
@@ -59,9 +61,9 @@ case "${1:-start}" in
 esac
 
 # ---- Settings ---------------------------------------------------------------
-# ComfyUI's own folder (the one with models/ and output/ in it). Required:
-# model downloads land in its models folder.
-export HEISS_COMFY_ROOT="${HEISS_COMFY_ROOT:-}"
+# ComfyUI's own folder (the one with models/ and output/ in it): model
+# downloads land in its models folder.
+export HEISS_COMFY_ROOT="${HEISS_COMFY_ROOT:-/workspace/ComfyUI}"
 export COMFY_URL="${COMFY_URL:-http://127.0.0.1:8188}"
 export COMFY_OUTPUT_DIR="${COMFY_OUTPUT_DIR:-${HEISS_COMFY_ROOT:+$HEISS_COMFY_ROOT/output}}"
 export PORT="${PORT:-8787}"
@@ -76,8 +78,8 @@ export HEISS_NO_BROWSER=1
 # -----------------------------------------------------------------------------
 
 if [ -z "$HEISS_COMFY_ROOT" ] || [ ! -d "$HEISS_COMFY_ROOT/models" ]; then
-  echo "Set HEISS_COMFY_ROOT to ComfyUI's folder (the one with models/ in it)." >&2
-  echo "  e.g. HEISS_COMFY_ROOT=/workspace/ComfyUI $0" >&2
+  echo "No ComfyUI at $HEISS_COMFY_ROOT (a folder with models/ in it)." >&2
+  echo "Set HEISS_COMFY_ROOT to ComfyUI's folder, e.g. HEISS_COMFY_ROOT=/path/to/ComfyUI $0" >&2
   exit 1
 fi
 
