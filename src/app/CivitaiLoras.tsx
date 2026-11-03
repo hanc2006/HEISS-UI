@@ -144,7 +144,7 @@ export function LoraDetail({ id, name, model = '', otherModel = false, size = 0,
     <section className="lb-detail" aria-label={name}>
       <div className="lb-hero">
         <div className="lb-hero-media">
-          {image ? <SafeImg key={image.url} src={image.url} referrerPolicy="no-referrer" alt={made?.prompt ? `Made with this LoRA: ${made.prompt.slice(0, 120)}` : `A picture made with ${name}`} />
+          {image ? <Media key={image.url} still={image.url} video={'video' in image ? image.video : undefined} alt={made?.prompt ? `Made with this LoRA: ${made.prompt.slice(0, 120)}` : `A picture made with ${name}`} />
             : loading ? <span className="lb-skeleton is-media" aria-hidden="true" /> : <LoraThumb label="" plain />}
           <h3 className="lb-hero-name">{name}</h3>
           {favorite ? (
@@ -202,6 +202,16 @@ export function LoraDetail({ id, name, model = '', otherModel = false, size = 0,
   );
 }
 
+
+/**
+ * One of a LoRA's pictures: a video plays (muted, looping) over its first
+ * frame; if the clip won't load, the frame stays.
+ */
+function Media({ still, video, alt }: { still: string; video?: string; alt: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!video || failed) return <SafeImg src={still} referrerPolicy="no-referrer" alt={alt} />;
+  return <video src={video} poster={still} aria-label={alt} autoPlay muted loop playsInline preload="metadata" onError={() => setFailed(true)} />;
+}
 
 /** Label on the left, its values as badges on the right; each badge copies its own value. */
 export function FactRow({ label, values, tone = '', copied, onCopy }: { label: string; values: string[]; tone?: string; copied: string | null; onCopy: (value: string, key: string) => void }) {

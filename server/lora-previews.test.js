@@ -135,3 +135,14 @@ test("a LoRA matched with Civitai gets Civitai's first picture beside it, so its
   assert.ok(fs.existsSync(path.join(loraDir, "older.preview.jpeg")));
   assert.deepEqual(asked.filter((item) => item.startsWith("/api/")), [], "only the picture was fetched");
 });
+
+test("a .civitai.json saved before videos were kept is read again from Civitai, keeping its name", async () => {
+  fs.writeFileSync(path.join(loraDir, "wanclip.safetensors"), Buffer.from("wan weights"));
+  fs.writeFileSync(path.join(loraDir, "wanclip.civitai.json"), JSON.stringify({ versionId: 22, modelId: 2, name: "Neon Nights", version: "v1", baseModel: "Flux.2 D", details: { trainedWords: [], images: [] }, mature: false }));
+  const asked = [];
+  const info = await loraCivitaiInfo("wanclip.safetensors", { env: {}, transport: civitaiAnswers("", asked) });
+  assert.ok(asked.includes("/api/v1/model-versions/22"), "its details were asked for again");
+  assert.ok(!asked.some((item) => item.includes("by-hash")), "but not which LoRA it is");
+  assert.equal(info.details.images.length, 1);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(loraDir, "wanclip.civitai.json"), "utf8")).detailsVersion, 2);
+});

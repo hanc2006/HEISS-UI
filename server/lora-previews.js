@@ -50,6 +50,7 @@ function cleanDetails(value) {
   const number = (item) => (Number.isFinite(Number(item)) && item !== null && item !== "" ? Number(item) : null);
   const images = (Array.isArray(value.images) ? value.images : []).filter((image) => /^https:\/\//.test(String(image?.url || ""))).slice(0, 12).map((image) => ({
     url: String(image.url), width: number(image.width), height: number(image.height),
+    ...(/^https:\/\//.test(String(image.video || "")) ? { video: String(image.video) } : {}),
     made: image.made && typeof image.made === "object" ? {
       prompt: text(image.made.prompt, 4000), negativePrompt: text(image.made.negativePrompt, 4000), seed: number(image.made.seed),
       steps: number(image.made.steps), cfgScale: number(image.made.cfgScale), sampler: text(image.made.sampler, 80), clipSkip: number(image.made.clipSkip)
@@ -71,7 +72,8 @@ function readSidecar(file) {
     if (!Number.isSafeInteger(versionId) || versionId <= 0) return null;
     return {
       ref: { versionId, modelId: Number(value.modelId) || 0, name: text(value.name, 200), version: text(value.version, 200), baseModel: text(value.baseModel, 80) },
-      details: cleanDetails(value.details),
+      // Details saved before videos were kept (no detailsVersion) are read again from Civitai.
+      details: Number(value.detailsVersion) >= detailsVersion ? cleanDetails(value.details) : null,
       mature: Boolean(value.mature)
     };
   } catch {
@@ -79,9 +81,12 @@ function readSidecar(file) {
   }
 }
 
+// 2: pictures include videos (as a first-frame still plus the clip).
+const detailsVersion = 2;
+
 function writeSidecar(file, ref, details = null, mature = false) {
   const target = sidecarOf(file);
-  const value = { ...ref, ...(details ? { details: cleanDetails(details), mature, savedAt: new Date().toISOString() } : {}) };
+  const value = { ...ref, ...(details ? { details: cleanDetails(details), detailsVersion, mature, savedAt: new Date().toISOString() } : {}) };
   fs.writeFileSync(`${target}.part`, `${JSON.stringify(value, null, 2)}\n`);
   fs.renameSync(`${target}.part`, target);
 }

@@ -84,7 +84,7 @@ test("search: LoRA types for the family's bases, SFW on civitai.com, one row per
     ["Glow", "SDXL 1.0", "glow.safetensors", "civitai:11:111"],
     ["Ink", "Illustrious", "ink.safetensors", "civitai:22:221"]
   ]);
-  assert.equal(result.rows[0].preview, "https://image.civitai.com/key/uuid-11/width=160/11.jpeg");
+  assert.equal(result.rows[0].preview, "https://image.civitai.com/key/uuid-11/width=320/11.jpeg");
   assert.equal(result.rows[0].creator, "maker1");
   assert.equal(result.nextCursor, "next-page");
 });
@@ -108,7 +108,7 @@ test("mature content on: civitai.red, nsfw=true, and mature previews shown; off:
   const shown = await civitai.searchLoras({ family: "sdxl" }, { transport: on.transport, env: { HEISS_CIVITAI_NSFW: "1" } });
   assert.equal(on.calls[0].url.origin, "https://civitai.red");
   assert.equal(on.calls[0].url.searchParams.get("nsfw"), "true");
-  assert.match(shown.rows[0].preview, /width=160/);
+  assert.match(shown.rows[0].preview, /width=320/);
 
   const off = fakeCivitai([{ items, metadata: {} }]);
   const hidden = await civitai.searchLoras({ family: "sdxl" }, { transport: off.transport, env: {} });
@@ -127,7 +127,7 @@ test("Civitai's hosts: both sites, with or without www, never a look-alike; prev
   for (const host of ["civitai.com.evil.net", "evilcivitai.com", "civitai.work", "image.civitai.com"]) assert.equal(civitai.isCivitaiHost(host), false, host);
   const { transport } = fakeCivitai([{ items: [model(7, "Red", [version(71, "Pony", [file(711, "red.safetensors")], { images: [{ url: "https://image.civitai.red/k/u/width=450/r.jpeg", nsfwLevel: 1, type: "image" }] })])], metadata: {} }]);
   const result = await civitai.searchLoras({ family: "sdxl" }, { transport, env: {} });
-  assert.equal(result.rows[0].preview, "https://image.civitai.red/k/u/width=160/r.jpeg");
+  assert.equal(result.rows[0].preview, "https://image.civitai.red/k/u/width=320/r.jpeg");
 });
 
 test("the key goes to Civitai only, never to the storage a download redirects to", async () => {
@@ -177,8 +177,12 @@ test("details: the version and its pictures with prompts, asked for together; ma
   assert.deepEqual([images.get("modelVersionId"), images.get("withMeta"), images.get("nsfw")], ["22", "true", "false"]);
   assert.deepEqual(details.trainedWords, ["L3N0V0"]);
   assert.deepEqual(details.strength, { value: 0.9, min: 0.6, max: 1.2 });
-  assert.equal(details.images.length, 1, "no mature picture, no video, nothing from another host");
+  assert.equal(details.images.length, 2, "no mature picture, nothing from another host; a video counts");
   assert.equal(details.images[0].url, "https://image.civitai.com/k/a/width=640/a.jpeg");
+  assert.equal(details.images[0].video, undefined);
+  // A video: its first frame as a still, and the clip itself, both through Civitai's CDN.
+  assert.equal(details.images[1].url, "https://image.civitai.com/k/c/anim=false,transcode=true,width=640/c.jpeg");
+  assert.equal(details.images[1].video, "https://image.civitai.com/k/c/transcode=true,width=640/c.mp4");
   assert.deepEqual(details.images[0].made, { prompt: "a lighthouse at dusk", negativePrompt: "blurry", seed: 413271325284305, steps: 28, cfgScale: 3.5, sampler: "Euler", clipSkip: null });
   assert.equal(details.page, "https://civitai.com/models/2?modelVersionId=22");
   assert.equal(await civitai.loraDetails("not-a-number", { transport, env: {} }), null);
@@ -263,4 +267,14 @@ test("a file is found on Civitai by its SHA-256; one Civitai doesn't know is nul
   assert.deepEqual(await civitai.versionByHash(known.toUpperCase(), { transport, env: {} }), { versionId: 7, modelId: 3, name: "Ink", version: "v2", baseModel: "SDXL 1.0" });
   assert.equal(await civitai.versionByHash("b".repeat(64), { transport, env: {} }), null);
   assert.equal(await civitai.versionByHash("not-a-hash", { transport, env: {} }), null);
+});
+
+test("a LoRA shown only with videos still gets a picture: the first frame of its first video", () => {
+  const rows = civitai.loraRows([{
+    id: 5, name: "Wan Motion", creator: { username: "maker" }, stats: { downloadCount: 3 },
+    modelVersions: [{ id: 50, name: "v1", baseModel: "Wan Video 2.2 I2V-A14B", files: [{ id: 500, name: "motion.safetensors", primary: true, sizeKB: 1, hashes: { SHA256: "a".repeat(64) }, downloadUrl: "https://civitai.com/api/download/models/500" }],
+      // Civitai can name a video .jpeg; its type says what it is. No options segment either.
+      images: [{ url: "https://image.civitai.com/key/uuid-1/clip.jpeg", type: "video", nsfwLevel: 1 }] }]
+  }], ["Wan Video 2.2 I2V-A14B"]);
+  assert.equal(rows[0].preview, "https://image.civitai.com/key/uuid-1/anim=false,transcode=true,width=320/clip.jpeg");
 });

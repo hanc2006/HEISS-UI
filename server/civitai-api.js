@@ -166,17 +166,41 @@ function loraFile(version) {
   return usable.find((file) => file.primary) || usable[0] || null;
 }
 
-/** Pictures (not videos) this setting may show: mature ones only with the switch on. */
+/** Pictures and videos this setting may show: mature ones only with the switch on. */
 function showable(images, mature) {
-  return (Array.isArray(images) ? images : []).filter((image) => image?.url && image.type !== "video" && isCivitaiImage(image.url) && (mature || !(Number(image.nsfwLevel) > 1)));
+  return (Array.isArray(images) ? images : []).filter((image) => image?.url && isCivitaiImage(image.url) && (mature || !(Number(image.nsfwLevel) > 1)));
+}
+
+const isVideo = (image) => image?.type === "video" || /\.(mp4|webm|mov)$/i.test(String(image?.url || ""));
+
+/**
+ * One of Civitai's media addresses with other CDN options and file type:
+ * …/<key>/<uuid>/<options>/<name>, where the options segment may be missing.
+ */
+function withOptions(url, options, ext = "") {
+  try {
+    const parsed = new URL(String(url));
+    const parts = parsed.pathname.split("/");
+    let name = parts.pop() || "";
+    if (parts.length && /=/.test(parts[parts.length - 1])) parts.pop();
+    if (ext) name = name.replace(/\.[a-z0-9]+$/i, "") + `.${ext}`;
+    parsed.pathname = [...parts, options, name].join("/");
+    return parsed.href;
+  } catch {
+    return String(url);
+  }
 }
 
 // Civitai serves any width from the same address (…/width=450/… or …/original=true/…).
-const sized = (url, width) => String(url).replace(/\/(?:width=\d+|original=true)\//, `/width=${width}/`);
+// A video's still is its first frame: anim=false and transcode=true together, as a .jpeg
+// (an <img> can't show the .mp4 an image address may otherwise lead to).
+const sized = (url, width) => withOptions(url, `width=${width}`);
+const stillOf = (image, width) => (isVideo(image) ? withOptions(image.url, `anim=false,transcode=true,width=${width}`, "jpeg") : sized(image.url, width));
+const videoOf = (image, width) => (isVideo(image) ? withOptions(image.url, `transcode=true,width=${width}`, "mp4") : "");
 
 function previewOf(version, mature) {
   const [first] = showable(version?.images, mature);
-  return first ? sized(first.url, 160) : "";
+  return first ? stillOf(first, 320) : "";
 }
 
 /** One row per model: its newest version made for one of `bases`, with a usable file. */
@@ -297,7 +321,8 @@ export async function loraDetails(versionId, options = {}) {
   const data = version.value || {};
   const fromImages = pictures.status === "fulfilled" ? showable(pictures.value?.items, mature) : [];
   const images = (fromImages.length ? fromImages : showable(data.images, mature)).slice(0, 12).map((image) => ({
-    url: sized(image.url, 640), width: number(image.width), height: number(image.height), made: madeWith(image.meta)
+    url: stillOf(image, 640), ...(isVideo(image) ? { video: videoOf(image, 640) } : {}),
+    width: number(image.width), height: number(image.height), made: madeWith(image.meta)
   }));
   return {
     versionId: id, modelId: number(data.modelId), name: text(data.model?.name, 200), version: text(data.name, 200),
@@ -331,7 +356,7 @@ export async function civitaiDownload(id = "", options = {}) {
     id: `civitai:${match[1]}:${match[2]}`, file: name, folder: "loras",
     label: String(version?.model?.name || name), url: url.href,
     bytes: Math.round(Number(file.sizeKB || 0) * 1024), sha256, source: "Civitai",
-    ...(picture ? { preview: sized(picture.url, 450) } : {}),
+    ...(picture ? { preview: stillOf(picture, 450) } : {}),
     // Which Civitai LoRA this is, kept beside the file (lora-previews.js) so its card can show Civitai's details.
     civitai: civitaiRef(version)
   };

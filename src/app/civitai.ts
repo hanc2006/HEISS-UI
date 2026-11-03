@@ -40,7 +40,8 @@ export type CivitaiLoraDetails = {
   trainedWords: string[];
   /** The maker's recommended strength, when Civitai sends one. */
   strength: { value: number; min: number | null; max: number | null } | null;
-  images: Array<{ url: string; width: number | null; height: number | null; made: CivitaiMade | null }>;
+  /** `url` is always a still (a video's first frame); `video` is the clip itself, for videos. */
+  images: Array<{ url: string; video?: string; width: number | null; height: number | null; made: CivitaiMade | null }>;
   /** The primary file's size. */
   bytes?: number;
   page: string;
