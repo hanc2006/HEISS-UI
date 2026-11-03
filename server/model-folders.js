@@ -396,8 +396,9 @@ export async function findModelFolders(knownKinds, { home = os.homedir(), drives
     while (queue.length && visited < budget && Date.now() < until) {
       const { dir, depth } = queue.shift();
       visited += 1;
-      // A models folder is a leaf here: its own subfolders are its kinds.
-      const names = depth > 0 ? await consider(dir, source) : await subdirsAsync(dir);
+      // A models folder is a leaf here: its own subfolders are its kinds. A folder named
+      // for the search (HEISS_MODEL_SEARCH_PATHS, /workspace/models…) may be one itself.
+      const names = depth > 0 || source === "setting" || source === "server" ? await consider(dir, source) : await subdirsAsync(dir);
       if (!names || depth >= maxDepth) continue;
       for (const name of names) {
         if (skipNames.test(name) || (depth === 0 && skipTop?.test(name)) || (depth + 1 >= narrowFrom && !aiNames.test(name))) continue;

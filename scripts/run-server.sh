@@ -73,6 +73,9 @@ export HEISS_ALLOWED_HOSTS="${HEISS_ALLOWED_HOSTS:-100.65.23.88}"
 # Signed-in devices may install models and nodes, update, change folders.
 export HEISS_ADMIN_FROM_DEVICES="${HEISS_ADMIN_FROM_DEVICES:-1}"
 export HEISS_NO_BROWSER=1
+# Extra folders Find models searches for models ComfyUI doesn't read yet
+# (several: separate them with ':').
+export HEISS_MODEL_SEARCH_PATHS="${HEISS_MODEL_SEARCH_PATHS:-/workspace/models/}"
 # HEISS_STUDIO_PASSWORD: set it in the shell to keep a password of your own.
 # Without it, every start makes a new one.
 # -----------------------------------------------------------------------------

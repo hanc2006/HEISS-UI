@@ -206,3 +206,19 @@ test("a folder picker is offered only where one can open: a desktop, not a headl
   assert.equal(canPickFolder({}, "linux"), false);
   assert.equal(canPickFolder({ DISPLAY: ":0" }, "linux"), true);
 });
+
+test("a folder named in HEISS_MODEL_SEARCH_PATHS can be the models folder itself", async () => {
+  const volume = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), "heiss-direct-")));
+  touch(path.join(volume, "loras", "direct.safetensors"));
+  touch(path.join(volume, "checkpoints", "direct-model.safetensors"));
+  process.env.HEISS_MODEL_SEARCH_PATHS = `${volume}${path.sep}`;
+  try {
+    const report = await modelFolderReport({ scan });
+    const found = report.folders.find((folder) => folder.path === volume);
+    assert.ok(found, "the folder itself, trailing separator and all");
+    assert.equal(found.count, 2);
+  } finally {
+    delete process.env.HEISS_MODEL_SEARCH_PATHS;
+    fs.rmSync(volume, { recursive: true, force: true });
+  }
+});
